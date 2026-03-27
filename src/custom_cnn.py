@@ -205,7 +205,7 @@ class CustomCNN(nn.Module):
         # Classifier (BatchNorm dahil - daha stabil)
         self.classifier = nn.Sequential(
             nn.Linear(256, 128),
-            nn.BatchNorm1d(128),
+            nn.LayerNorm(128),
             nn.ReLU(inplace=True),
             nn.Dropout(p=dropout),
             nn.Linear(128, num_classes)
