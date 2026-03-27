@@ -39,7 +39,6 @@ def get_train_augmentation() -> A.Compose:
             translate_percent={"x": (-0.1, 0.1), "y": (-0.1, 0.1)},
             scale=(0.85, 1.15),
             rotate=(-20, 20),
-            mode=0,
             p=0.5
         ),
 
@@ -60,7 +59,7 @@ def get_train_augmentation() -> A.Compose:
         ], p=0.2),
 
         # Hafif noise
-        A.GaussNoise(std_range=(5.0, 25.0), p=0.2),
+        A.GaussNoise(std_range=(0.02, 0.1), p=0.2),
 
         # Elastic transform (medikal görüntüde yaygın)
         A.ElasticTransform(alpha=50, sigma=5, p=0.2),
