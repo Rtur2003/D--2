@@ -125,8 +125,8 @@ def get_target_layer(model, model_name: str):
         # ConvNeXt-Tiny: son stage'in son bloğu
         return model.stages[-1].blocks[-1]
     else:
-        # Custom CNN: son conv bloğu
-        return model.block4.conv2
+        # Custom CNN v2: son residual bloğun son conv katmanı
+        return model.block3.conv2
 
 
 def overlay_cam_on_image(
