@@ -1,0 +1,20 @@
+# Model dosyalari (buyuk dosyalar)
+models/*.pth
+models/*.pt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+src/__pycache__/
+
+# Sonuclar (isteğe bağlı - grafikler git'e girmeyebilir)
+# results/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
