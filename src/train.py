@@ -290,7 +290,7 @@ def train_model(
             best_val_loss = val_loss
             best_model_state = copy.deepcopy(model.state_dict())
             patience_counter = 0
-            print(f"  ✓ Yeni en iyi model! Val Loss: {val_loss:.4f}")
+            print(f"  [BEST] Yeni en iyi model! Val Loss: {val_loss:.4f}")
         else:
             patience_counter += 1
             if patience_counter >= patience:
