@@ -44,8 +44,8 @@ RANDOM_SEED = 42
 DEFAULT_HPARAMS = {
     "learning_rate": 1e-4,
     "batch_size": 16,
-    "epochs": 50,
-    "early_stopping_patience": 7,
+    "epochs": 30,
+    "early_stopping_patience": 5,
     "weight_decay": 1e-4,
     "scheduler_factor": 0.5,
     "scheduler_patience": 3,
@@ -54,9 +54,9 @@ DEFAULT_HPARAMS = {
 # ── Hyperparameter Grid Search Space ────────────────────────────────────
 
 HPARAM_GRID = {
-    "learning_rate": [1e-3, 5e-4, 1e-4, 5e-5],
-    "batch_size": [8, 16, 32],
-    "weight_decay": [1e-3, 1e-4, 1e-5],
+    "learning_rate": [5e-4, 1e-4, 5e-5],
+    "batch_size": [8, 16],
+    "weight_decay": [1e-3, 1e-4],
 }
 
 # ── Device ──────────────────────────────────────────────────────────────

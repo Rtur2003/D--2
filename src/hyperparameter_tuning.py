@@ -245,7 +245,7 @@ def run_hyperparameter_tuning() -> Dict:
         train_paths=train_paths, train_labels=train_labels,
         val_paths=val_paths, val_labels=val_labels,
         mean=mean, std=std,
-        quick_epochs=10
+        quick_epochs=5
     )
 
     plot_grid_search_results(
@@ -260,7 +260,7 @@ def run_hyperparameter_tuning() -> Dict:
         train_paths=train_paths, train_labels=train_labels,
         val_paths=val_paths, val_labels=val_labels,
         mean=mean, std=std,
-        quick_epochs=10
+        quick_epochs=5
     )
 
     plot_grid_search_results(
