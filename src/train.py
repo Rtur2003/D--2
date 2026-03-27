@@ -321,36 +321,48 @@ def run_training(augment: bool = True) -> None:
     print(f"[DATA] Augmentation: {'Aktif' if augment else 'Kapalı'}")
 
     # ── 4. Model 1: ConvNeXt (Pre-trained) ─────────────────────────────
-    print("\n" + "=" * 70)
-    print("MODEL 1: ConvNeXt-Tiny (Pre-trained, Transfer Learning)")
-    print("=" * 70)
+    convnext_ckpt = MODELS_DIR / "convnext_tiny_best.pth"
+    if convnext_ckpt.exists():
+        print("\n" + "=" * 70)
+        print("MODEL 1: ConvNeXt-Tiny → Zaten eğitilmiş, atlanıyor.")
+        print("=" * 70)
+    else:
+        print("\n" + "=" * 70)
+        print("MODEL 1: ConvNeXt-Tiny (Pre-trained, Transfer Learning)")
+        print("=" * 70)
 
-    convnext = get_convnext_model(pretrained=True)
-    convnext_history = train_model(
-        convnext, train_loader, val_loader,
-        model_name="convnext_tiny",
-        hparams=DEFAULT_HPARAMS
-    )
-    plot_training_curves(
-        convnext_history, "ConvNeXt-Tiny",
-        save_path=str(RESULTS_DIR / "convnext_training_curves.png")
-    )
+        convnext = get_convnext_model(pretrained=True)
+        convnext_history = train_model(
+            convnext, train_loader, val_loader,
+            model_name="convnext_tiny",
+            hparams=DEFAULT_HPARAMS
+        )
+        plot_training_curves(
+            convnext_history, "ConvNeXt-Tiny",
+            save_path=str(RESULTS_DIR / "convnext_training_curves.png")
+        )
 
     # ── 5. Model 2: Custom CNN ─────────────────────────────────────────
-    print("\n" + "=" * 70)
-    print("MODEL 2: Custom CNN (Özgün Mimari)")
-    print("=" * 70)
+    custom_ckpt = MODELS_DIR / "custom_cnn_best.pth"
+    if custom_ckpt.exists():
+        print("\n" + "=" * 70)
+        print("MODEL 2: Custom CNN → Zaten eğitilmiş, atlanıyor.")
+        print("=" * 70)
+    else:
+        print("\n" + "=" * 70)
+        print("MODEL 2: Custom CNN (Özgün Mimari)")
+        print("=" * 70)
 
-    custom_cnn = get_custom_cnn()
-    custom_history = train_model(
-        custom_cnn, train_loader, val_loader,
-        model_name="custom_cnn",
-        hparams=DEFAULT_HPARAMS
-    )
-    plot_training_curves(
-        custom_history, "Custom CNN",
-        save_path=str(RESULTS_DIR / "custom_cnn_training_curves.png")
-    )
+        custom_cnn = get_custom_cnn()
+        custom_history = train_model(
+            custom_cnn, train_loader, val_loader,
+            model_name="custom_cnn",
+            hparams=DEFAULT_HPARAMS
+        )
+        plot_training_curves(
+            custom_history, "Custom CNN",
+            save_path=str(RESULTS_DIR / "custom_cnn_training_curves.png")
+        )
 
     print("\n" + "=" * 70)
     print("EĞİTİM TAMAMLANDI!")
