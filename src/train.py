@@ -162,7 +162,7 @@ def train_model(
     )
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=sched_factor,
-        patience=sched_patience, verbose=True
+        patience=sched_patience
     )
 
     # Eğitim geçmişi
