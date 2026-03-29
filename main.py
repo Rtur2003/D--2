@@ -16,8 +16,13 @@
 
 import sys
 import os
+import io
 
-# src/ klasörünü path'e ekle
+# Windows cp1254 encoding sorununu coz - UTF-8 stdout
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
+# src/ klasorunu path'e ekle
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 from config import DEVICE, RESULTS_DIR, MODELS_DIR

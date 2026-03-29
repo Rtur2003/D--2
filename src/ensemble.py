@@ -2,14 +2,14 @@
 # ENSEMBLE MODEL - İki Modelin Birleştirilmesi
 # =========================================================================
 # Neden Ensemble?
-# → Tek model hata yapabilir, iki model birbirini tamamlar
-# → ConvNeXt (derin, genel özellikler) + Custom CNN (basit, yerel özellikler)
-# → Soft voting: Her iki modelin olasılık tahminlerinin ortalaması
+# -> Tek model hata yapabilir, iki model birbirini tamamlar
+# -> ConvNeXt (derin, genel özellikler) + Custom CNN (basit, yerel özellikler)
+# -> Soft voting: Her iki modelin olasılık tahminlerinin ortalaması
 #
 # Medikal AI'da Ensemble neden kritik?
-# → Yanlış negatif (kaçırılan kanama) hayat tehlikesi
-# → Ensemble ile false negative oranı düşer
-# → Farklı mimari = farklı hata paterni = birbirini düzeltme
+# -> Yanlış negatif (kaçırılan kanama) hayat tehlikesi
+# -> Ensemble ile false negative oranı düşer
+# -> Farklı mimari = farklı hata paterni = birbirini düzeltme
 # =========================================================================
 
 import json
@@ -158,7 +158,7 @@ def compute_optimal_weights(
                 total += labels.size(0)
 
         acc = correct / total
-        print(f"  w1={w1:.1f}, w2={w2:.1f} → Val Acc: {acc:.4f}")
+        print(f"  w1={w1:.1f}, w2={w2:.1f} -> Val Acc: {acc:.4f}")
 
         if acc > best_acc:
             best_acc = acc
