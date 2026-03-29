@@ -159,7 +159,7 @@ def evaluate_model(
     test_dataset = HeadCTDataset(test_paths, test_labels, test_transform)
     test_loader = DataLoader(
         test_dataset, batch_size=16, shuffle=False,
-        num_workers=0, pin_memory=True
+        num_workers=0, pin_memory=False
     )
 
     model = model.to(DEVICE)
@@ -356,9 +356,10 @@ def run_evaluation() -> None:
 
 
 def plot_comparison(all_metrics: Dict) -> None:
-    """İki modelin metriklerini karşılaştıran bar chart."""
+    """Tum modellerin metriklerini karsilastiran bar chart."""
     models = [m["model_name"] for m in all_metrics.values()]
     metrics_names = ["Accuracy", "Precision", "Recall", "F1-Score"]
+    colors = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b"]
 
     values = []
     for m in all_metrics.values():
@@ -367,34 +368,40 @@ def plot_comparison(all_metrics: Dict) -> None:
             m["recall_weighted"], m["f1_weighted"]
         ])
 
+    n_models = len(models)
     x = np.arange(len(metrics_names))
-    width = 0.35
+    width = 0.8 / n_models
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    bars1 = ax.bar(x - width/2, values[0], width, label=models[0], color="#3b82f6")
-    bars2 = ax.bar(x + width/2, values[1], width, label=models[1], color="#ef4444")
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    all_bars = []
+    for i in range(n_models):
+        offset = (i - n_models / 2 + 0.5) * width
+        bars = ax.bar(x + offset, values[i], width,
+                      label=models[i], color=colors[i % len(colors)])
+        all_bars.append(bars)
 
     ax.set_ylabel("Score", fontsize=12)
-    ax.set_title("Model Karşılaştırması - Test Sonuçları", fontsize=14, fontweight="bold")
+    ax.set_title("Model Karsilastirmasi - Test Sonuclari",
+                 fontsize=14, fontweight="bold")
     ax.set_xticks(x)
     ax.set_xticklabels(metrics_names, fontsize=11)
     ax.legend(fontsize=11)
-    ax.set_ylim([0, 1.1])
+    ax.set_ylim([0, 1.15])
     ax.grid(axis="y", alpha=0.3)
 
-    # Değerleri bar üzerine yaz
-    for bars in [bars1, bars2]:
+    for bars in all_bars:
         for bar in bars:
             height = bar.get_height()
             ax.annotate(f'{height:.3f}',
                        xy=(bar.get_x() + bar.get_width() / 2, height),
                        xytext=(0, 3), textcoords="offset points",
-                       ha='center', va='bottom', fontsize=9)
+                       ha='center', va='bottom', fontsize=8)
 
     plt.tight_layout()
     save_path = str(RESULTS_DIR / "model_comparison.png")
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    print(f"[PLOT] Karşılaştırma grafiği kaydedildi: {save_path}")
+    print(f"[PLOT] Karsilastirma grafigi kaydedildi: {save_path}")
     plt.close()
 
 
