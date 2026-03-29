@@ -1,0 +1,19 @@
+{
+  "model_name": "Custom CNN",
+  "accuracy": 0.8,
+  "precision_weighted": 0.8054298642533937,
+  "recall_weighted": 0.8,
+  "f1_weighted": 0.7991071428571428,
+  "per_class": {
+    "Normal": {
+      "precision": 0.7647058823529411,
+      "recall": 0.8666666666666667,
+      "f1": 0.8125
+    },
+    "Hemorrhage": {
+      "precision": 0.8461538461538461,
+      "recall": 0.7333333333333333,
+      "f1": 0.7857142857142857
+    }
+  }
+}
