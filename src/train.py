@@ -461,7 +461,7 @@ def run_training(augment: bool = True) -> None:
     convnext_ckpt = MODELS_DIR / "convnext_tiny_best.pth"
     if convnext_ckpt.exists():
         print("\n" + "=" * 70)
-        print("MODEL 1: ConvNeXt-Tiny → Zaten eğitilmiş, atlanıyor.")
+        print("MODEL 1: ConvNeXt-Tiny -> Zaten egitilmis, atlaniyor.")
         print("=" * 70)
     else:
         convnext_history = train_convnext_progressive(
@@ -476,7 +476,7 @@ def run_training(augment: bool = True) -> None:
     custom_ckpt = MODELS_DIR / "custom_cnn_best.pth"
     if custom_ckpt.exists():
         print("\n" + "=" * 70)
-        print("MODEL 2: Custom CNN → Zaten eğitilmiş, atlanıyor.")
+        print("MODEL 2: Custom CNN -> Zaten egitilmis, atlaniyor.")
         print("=" * 70)
     else:
         print("\n" + "=" * 70)

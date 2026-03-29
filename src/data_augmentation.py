@@ -93,7 +93,7 @@ def augment_and_save_samples(
     all_paths = list(image_paths)
     all_labels = list(labels)
 
-    print(f"[AUGMENT] {len(image_paths)} orijinal görüntü → "
+    print(f"[AUGMENT] {len(image_paths)} orijinal goruntu -> "
           f"{len(image_paths) * (1 + num_augmented_per_image)} toplam")
 
     for idx, (img_path, label) in enumerate(zip(image_paths, labels)):

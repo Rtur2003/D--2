@@ -131,13 +131,13 @@ def grid_search(
         }
         results.append(result)
 
-        print(f"  → Val Loss: {best_epoch_val_loss:.4f}, "
+        print(f"  -> Val Loss: {best_epoch_val_loss:.4f}, "
               f"Val Acc: {best_epoch_val_acc:.4f}")
 
         if best_epoch_val_loss < best_val_loss:
             best_val_loss = best_epoch_val_loss
             best_params = hparams
-            print(f"  ★ Yeni en iyi!")
+            print(f"  [BEST] Yeni en iyi!")
 
     # Sonuçları sırala
     results.sort(key=lambda x: x["best_val_loss"])
@@ -152,7 +152,7 @@ def grid_search(
               f"{r['weight_decay']:>10.1e} {r['best_val_loss']:>10.4f} "
               f"{r['best_val_acc']:>10.4f}")
 
-    print(f"\n★ En iyi parametreler:")
+    print(f"\n[BEST] En iyi parametreler:")
     print(f"  Learning Rate: {best_params['learning_rate']}")
     print(f"  Batch Size: {best_params['batch_size']}")
     print(f"  Weight Decay: {best_params['weight_decay']}")

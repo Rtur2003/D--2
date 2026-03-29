@@ -97,7 +97,7 @@ def plot_tsne(
     → Kümeleme kalitesini görsel olarak değerlendirir
     """
     print(f"[t-SNE] {model_name} - {features.shape[0]} örnek, "
-          f"{features.shape[1]} boyut → 2D")
+          f"{features.shape[1]} boyut -> 2D")
 
     tsne = TSNE(
         n_components=2,

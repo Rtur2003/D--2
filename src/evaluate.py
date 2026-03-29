@@ -169,10 +169,11 @@ def evaluate_model(
     metrics = compute_metrics(y_true, y_pred, model_name)
     print_evaluation_report(metrics)
 
-    # Confusion Matrix
+    # Confusion Matrix - dosya adi icin guvenli isim
+    safe_name = model_name.replace("-", "_").replace(" ", "_").lower()
     plot_confusion_matrix(
         y_true, y_pred, model_name,
-        save_path=str(RESULTS_DIR / f"{model_name}_confusion_matrix.png")
+        save_path=str(RESULTS_DIR / f"{safe_name}_confusion_matrix.png")
     )
 
     # Classification Report
@@ -180,7 +181,7 @@ def evaluate_model(
     print(f"\nDetaylı Classification Report:\n{report}")
 
     # Metrikleri kaydet
-    metrics_path = RESULTS_DIR / f"{model_name}_metrics.json"
+    metrics_path = RESULTS_DIR / f"{safe_name}_metrics.json"
     with open(str(metrics_path), "w") as f:
         json.dump(metrics, f, indent=2)
 
