@@ -277,9 +277,22 @@ def plot_training_analysis(
     ax.set_yscale("log")
     ax.grid(True, alpha=0.3)
 
+    # Overfitting durum analizi
+    final_gap = gen_gap[-1] if gen_gap else 0
+    max_gap = max(gen_gap) if gen_gap else 0
+    if max_gap > 0.1:
+        status = "UYARI: Overfitting belirtisi (gap > %10)"
+        status_color = "red"
+    elif max_gap > 0.05:
+        status = "DIKKAT: Hafif overfitting egilimi (gap > %5)"
+        status_color = "orange"
+    else:
+        status = "BASARILI: Iyi genelleme (gap < %5)"
+        status_color = "green"
+
     fig.suptitle(
-        f"Eğitim Dinamikleri Analizi - {model_name}",
-        fontsize=15, fontweight="bold", y=1.01
+        f"Egitim Dinamikleri Analizi - {model_name}\n{status}",
+        fontsize=14, fontweight="bold", y=1.02, color=status_color
     )
 
     plt.tight_layout()
@@ -287,6 +300,9 @@ def plot_training_analysis(
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
         print(f"[ANALYSIS] Kaydedildi: {save_path}")
+        print(f"[ANALYSIS] Durum: {status}")
+        print(f"[ANALYSIS] Max generalization gap: {max_gap:.4f}, "
+              f"Final gap: {final_gap:.4f}")
 
     plt.close()
 
