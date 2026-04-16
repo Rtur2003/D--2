@@ -100,13 +100,8 @@ def main():
     # ── Interface ──────────────────────────────────────────────────
     if args.app:
         print("\n[APP] Gradio Arayuzu Baslatiliyor...")
-        from app import create_interface
-        demo = create_interface()
-        demo.launch(
-            server_name="0.0.0.0",
-            server_port=7860,
-            share=False
-        )
+        from app import launch_interface
+        launch_interface()
 
     if not args.app:
         print("\n" + "=" * 70)
