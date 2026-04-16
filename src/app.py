@@ -10,6 +10,8 @@
 # =========================================================================
 
 import json
+import os
+import socket
 import torch
 import numpy as np
 from PIL import Image
@@ -32,6 +34,14 @@ from gradcam import GradCAM, get_target_layer, overlay_cam_on_image
 # ── Global model cache ──────────────────────────────────────────────────
 
 _models_cache = {}
+APP_THEME = gr.themes.Soft(primary_hue="blue", secondary_hue="red")
+APP_CSS = """
+.main-title {text-align: center; margin-bottom: 0.5em;}
+.warning-box {background-color: #fff3cd; border: 1px solid #ffc107;
+              border-radius: 8px; padding: 10px; margin: 10px 0;}
+.info-box {background-color: #e7f3ff; border: 1px solid #2196F3;
+           border-radius: 8px; padding: 10px; margin: 10px 0;}
+"""
 
 
 def _get_stats():
@@ -179,18 +189,8 @@ def predict_with_gradcam(image, model_choice: str):
 def create_interface():
     """Profesyonel Gradio arayuzu."""
 
-    custom_css = """
-    .main-title {text-align: center; margin-bottom: 0.5em;}
-    .warning-box {background-color: #fff3cd; border: 1px solid #ffc107;
-                  border-radius: 8px; padding: 10px; margin: 10px 0;}
-    .info-box {background-color: #e7f3ff; border: 1px solid #2196F3;
-               border-radius: 8px; padding: 10px; margin: 10px 0;}
-    """
-
     with gr.Blocks(
-        title="Head CT Hemorrhage Classifier",
-        theme=gr.themes.Soft(primary_hue="blue", secondary_hue="red"),
-        css=custom_css
+        title="Head CT Hemorrhage Classifier"
     ) as demo:
 
         gr.Markdown("""
@@ -271,6 +271,47 @@ def create_interface():
     return demo
 
 
-if __name__ == "__main__":
+def _is_port_available(server_name: str, port: int) -> bool:
+    """Istenen port kullanilabilir mi kontrol et."""
+    bind_host = "127.0.0.1" if server_name in {"0.0.0.0", ""} else server_name
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind((bind_host, port))
+        except OSError:
+            return False
+    return True
+
+
+def _pick_server_port(server_name: str, preferred_port: int, max_tries: int = 20) -> int:
+    """Tercih edilen port doluysa sonraki uygun portu sec."""
+    for offset in range(max_tries):
+        candidate = preferred_port + offset
+        if _is_port_available(server_name, candidate):
+            return candidate
+
+    raise OSError(
+        f"{preferred_port}-{preferred_port + max_tries - 1} araliginda bos port bulunamadi."
+    )
+
+
+def launch_interface():
+    """Gradio arayuzunu uygun portla baslat."""
+    server_name = os.getenv("GRADIO_SERVER_NAME", "127.0.0.1")
+    preferred_port = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
+    server_port = _pick_server_port(server_name, preferred_port)
+
+    if server_port != preferred_port:
+        print(f"[APP] Port {preferred_port} dolu, {server_port} kullaniliyor.")
+
     demo = create_interface()
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
+    return demo.launch(
+        server_name=server_name,
+        server_port=server_port,
+        share=False,
+        theme=APP_THEME,
+        css=APP_CSS,
+    )
+
+
+if __name__ == "__main__":
+    launch_interface()
