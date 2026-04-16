@@ -1,7 +1,4 @@
 # Model dosyalari (buyuk dosyalar)
-models/*.pth
-models/*.pt
-
 # Python cache
 __pycache__/
 *.pyc
