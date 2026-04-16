@@ -370,8 +370,8 @@ def train_convnext_progressive(
     finetuning_hparams = {
         **hparams,
         "learning_rate": 2e-5,  # Çok küçük lr - backbone'u bozmamak için
-        "epochs": 25,
-        "early_stopping_patience": 7,
+        "epochs": 30,
+        "early_stopping_patience": 5,
     }
 
     history = train_model(
