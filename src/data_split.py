@@ -42,8 +42,8 @@ def stratified_split(
     assert abs(train_ratio + val_ratio + test_ratio - 1.0) < 1e-6, \
         f"Oranlar toplamı 1.0 olmalı: {train_ratio + val_ratio + test_ratio}"
 
-    X = df["image_path"].values
-    y = df["label"].values
+    X = df["image_path"].to_numpy()
+    y = df["label"].to_numpy()
 
     # Adım 1: Test setini ayır (önce test → dokunulmaz)
     X_temp, X_test, y_temp, y_test = train_test_split(
