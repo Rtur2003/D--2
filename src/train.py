@@ -491,17 +491,28 @@ def run_training(augment: bool = True) -> None:
 
         custom_hparams = {
             **DEFAULT_HPARAMS,
-            "learning_rate": 5e-4,  # Custom CNN'e daha yüksek lr
-            "epochs": 35,
-            "early_stopping_patience": 7,
+            "learning_rate": 1e-4,  # Grid search optimal
+            "batch_size": 8,        # Grid search optimal (kucuk batch = daha iyi)
+            "weight_decay": 1e-4,   # Grid search optimal
+            "epochs": 40,
+            "early_stopping_patience": 8,
         }
 
+        # Custom CNN icin batch_size degisti, DataLoader yeniden olustur
+        train_loader_cnn, val_loader_cnn = create_dataloaders(
+            train_paths, train_labels,
+            val_paths, val_labels,
+            mean, std,
+            batch_size=custom_hparams["batch_size"],
+            augment=augment
+        )
+
         custom_history = train_model(
-            custom_cnn, train_loader, val_loader,
+            custom_cnn, train_loader_cnn, val_loader_cnn,
             model_name="custom_cnn",
             hparams=custom_hparams,
             use_mixup=True,
-            label_smoothing=0.1,
+            label_smoothing=0.05,   # Daha hafif smoothing (kucuk model icin)
             use_cosine=True,
         )
         plot_training_curves(
