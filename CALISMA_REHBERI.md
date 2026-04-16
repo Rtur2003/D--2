@@ -7,54 +7,59 @@
 ## 1. PROJENİN AKIŞ ŞEMASI
 
 ```
-[Veri Seti: 200 CT Görüntü]
+[Veri Seti: 200 CT Görüntü (100 Normal, 100 Hemorrhage)]
          │
          ▼
 [1. Ön İşleme (Preprocessing)]
     - Resize (224x224)
     - RGB dönüşümü
-    - Normalizasyon (mean/std → SADECE train'den)
+    - Normalizasyon (mean/std → SADECE train'den hesaplanır)
          │
          ▼
 [2. Veri Bölümleme (Data Split)]
-    - Stratified Split: 70% Train / 15% Val / 15% Test
-    - Sınıf oranları korunur
+    - Stratified Split: 70% Train (139) / 15% Val (31) / 15% Test (30)
+    - Sınıf oranları korunur (~%50/%50)
     - random_state=42 (tekrarlanabilirlik)
          │
          ▼
 [3. Veri Artırımı (Data Augmentation)]
     - SADECE Train setine uygulanır
-    - Flip, Rotation, CLAHE, Noise, Elastic
+    - Flip, Rotation, CLAHE, Noise, Elastic, Affine
          │
          ▼
 [4. Model Mimarisi]
-    ├── ConvNeXt-Tiny (Pre-trained, Transfer Learning)
-    └── Custom CNN (Özgün Tasarım, 1.2M parametre)
+    ├── ConvNeXt-Tiny (Pre-trained, 28M parametre, Transfer Learning)
+    └── Custom CNN v2 (Özgün: Residual + SE Attention + MultiScale, ~1.3M parametre)
          │
          ▼
 [5. Hiperparametre Tuning]
-    - Grid Search: LR, Batch Size, Weight Decay
-    - Validation seti üzerinde değerlendirilir
+    - Grid Search: LR × Batch Size × Weight Decay (12 kombinasyon)
+    - Validation seti üzerinde değerlendirilir (test ASLA kullanılmaz)
          │
          ▼
-[6. Eğitim (Training)]
-    - AdamW optimizer
-    - ReduceLROnPlateau scheduler
-    - Early Stopping (patience=7)
-    - Checkpoint: En iyi val_loss
+[6. Eğitim (Training) - İleri Teknikler]
+    - AdamW optimizer + Gradient Clipping (max_norm=1.0)
+    - Label Smoothing (0.05-0.1) → overconfident tahminleri önler
+    - Mixup (alpha=0.2) → veri artırımı + regularization
+    - Cosine Annealing (warm restart) → daha yumuşak LR azaltma
+    - Progressive Unfreezing (ConvNeXt: önce head, sonra backbone)
+    - Early Stopping (patience=5-8)
+    - Checkpoint: En iyi val_loss modeli kaydedilir
          │
          ▼
 [7. Değerlendirme (Evaluation)]
-    ├── Confusion Matrix
-    ├── Accuracy, Precision, Recall, F1
-    ├── ROC-AUC Eğrileri
-    ├── t-SNE Feature Visualization
-    ├── Grad-CAM (Model neye bakıyor?)
-    └── Ensemble Karşılaştırma
+    ├── Confusion Matrix (3 model)
+    ├── Accuracy, Precision, Recall, F1 (weighted + per-class)
+    ├── ROC-AUC + Precision-Recall Eğrileri
+    ├── t-SNE Feature Visualization (sınıf ayrımı kalitesi)
+    ├── Grad-CAM (Model neye bakıyor? Açıklanabilirlik)
+    ├── Eğitim Dinamikleri Analizi (overfitting gap, LR schedule)
+    └── Ensemble Karşılaştırma (optimal ağırlık: validation'dan)
          │
          ▼
 [8. Arayüz (Gradio)]
     - Dosya yükleme → Tahmin + Olasılık + Grad-CAM
+    - 3 model seçeneği + detaylı analiz raporu
 ```
 
 ---
@@ -78,19 +83,26 @@
 |-------|----------|--------------------------|
 | **Transfer Learning** | Başka veri setinde öğrenilmiş ağırlıkları kullanma | 200 görüntü sıfırdan eğitim için yetersiz → ImageNet ağırlıkları başlangıç noktası |
 | **ConvNeXt** | 2022'de Meta'nın geliştirdiği modern CNN mimarisi | ResNet'in modernize edilmiş hali, ViT ile rekabet edebilir, medikal görüntüde başarılı |
-| **Fine-tuning** | Pre-trained modelin son katmanlarını yeni veriyle güncelleme | Tüm ağı eğitmek yerine son katmanları adapte etmek küçük veride daha stabil |
-| **BatchNorm** | Her mini-batch'te aktivasyonları normalize etme | Eğitimi hızlandırır, internal covariate shift'i azaltır |
+| **Progressive Unfreezing** | Önce sadece classifier eğit, sonra tüm ağı aç | 200 görüntüyle 28M parametreyi direkt eğitmek = overfitting. Kademeli adaptasyon bunu önler |
+| **Fine-tuning** | Pre-trained modelin katmanlarını yeni veriyle güncelleme | Tüm ağı eğitmek yerine kademeli adapte etmek küçük veride daha stabil |
+| **Residual Connection** | Giriş + çıkış bağlantısı (skip connection) | Gradient vanishing problemi çözer, derin ağları eğitilebilir yapar. "En kötü ihtimal identity öğren" |
+| **SE Block (Squeeze-and-Excitation)** | Kanal bazlı attention mekanizması | Her feature kanalının önemini öğrenir → kanama tespiti için hangi kanallar kritik, model bunu seçer |
+| **Multi-Scale Feature Fusion** | Farklı çözünürlüklerde (1x1, 3x3, 5x5) özellik çıkarma | CT'de kanama hem küçük (subdural) hem büyük (intracerebral) olabilir → farklı ölçeklerde bakmalıyız |
+| **BatchNorm / LayerNorm** | Aktivasyonları normalize etme | Eğitimi hızlandırır, internal covariate shift'i azaltır |
 | **Global Average Pooling** | Feature map'leri tek bir vektöre indirger | Fully connected katmana göre çok daha az parametre → overfitting riski düşer |
-| **Dropout** | Eğitimde rastgele nöronları devre dışı bırakma | Overfitting önlemi → küçük veri setinde kritik |
+| **Dropout / Dropout2d** | Eğitimde rastgele nöronları/kanalları devre dışı bırakma | Overfitting önlemi → küçük veri setinde kritik. Conv bloklarda %10-20, classifier'da %40 |
 
 ### Eğitim Terimleri
 
 | Terim | Açıklama | Projede Neden Kullanıldı |
 |-------|----------|--------------------------|
 | **AdamW** | Adam optimizer + decoupled weight decay | Adam'ın regularization problemi çözülmüş hali, modern standart |
-| **Early Stopping** | Val loss iyileşmezse eğitimi durdurma | Overfitting noktasını otomatik bulur (patience=7) |
-| **ReduceLROnPlateau** | Val loss düzleşince LR'yi azaltma | Başta hızlı öğren, sonra ince ayar yap → daha iyi minimum |
-| **CrossEntropyLoss** | Sınıflandırma için standart kayıp fonksiyonu | İkili sınıflandırma problemi için uygun |
+| **Label Smoothing** | Hedef etiketi [1,0] yerine [0.95, 0.05] yapma | Modelin %100 emin olmasını engeller → overconfident tahminleri önler, generalizasyonu artırır |
+| **Mixup** | İki görüntüyü λ oranında karıştırarak yeni örnek üretme | x_mix = λ*x_i + (1-λ)*x_j. Karar sınırlarını yumuşatır, overfitting azaltır. Zhang et al. (2018) |
+| **Cosine Annealing** | LR'yi kosinüs fonksiyonuyla azaltma + warm restart | ReduceLROnPlateau'dan daha yumuşak, warm restart ile yerel minimumlardan kaçabilir |
+| **Gradient Clipping** | Gradient normunu max_norm ile sınırlama | Gradient patlamasını önler → eğitim stabilitesi, özellikle küçük batch'lerde önemli |
+| **Early Stopping** | Val loss iyileşmezse eğitimi durdurma | Overfitting noktasını otomatik bulur (ConvNeXt: patience=5, Custom CNN: patience=8) |
+| **CrossEntropyLoss** | Sınıflandırma için standart kayıp fonksiyonu | İkili sınıflandırma problemi için uygun, label smoothing ile birlikte kullanıldı |
 | **Weight Decay** | Ağırlıklara L2 regularization | Büyük ağırlıkları cezalandır → overfitting önle |
 
 ### Değerlendirme Terimleri
@@ -134,11 +146,12 @@
 - Test verisinin istatistikleri eğitim sürecine sızmamalı
 - Gerçek dünyada deployment'ta test verisi önceden bilinmez
 
-### Neden Custom CNN ~1.2M parametre?
+### Neden Custom CNN v2 (~1.3M parametre)?
 - 200 görüntü için 28M parametreli ConvNeXt bile çok büyük
 - Custom CNN daha az parametre = daha az overfitting riski
-- Transfer learning ile ConvNeXt avantajlı başlar ama Custom CNN'in generalizasyonu farklı olabilir
-- İkisini karşılaştırmak projenin amacı
+- **v2 Yenilikleri**: Residual bağlantılar (gradient flow), SE Attention (kanal bazlı önem), Multi-Scale (farklı boyut kanama tespiti)
+- Transfer learning ile ConvNeXt avantajlı başlar ama Custom CNN tamamen sıfırdan eğitiliyor
+- İkisini karşılaştırmak projenin amacı: pre-trained vs scratch, derin vs sığ
 
 ### Neden Ensemble?
 - **Medikal AI'da güvenilirlik kritik**: Yanlış negatif = kaçırılan kanama = hayat tehlikesi
@@ -175,8 +188,11 @@ C: Bu data leakage önlemenin temel kuralıdır. Gerçek dünyada deployment'ta 
 **S: ConvNeXt'i neden seçtiniz? ResNet50 kullansaydınız?**
 C: ConvNeXt (2022) Meta AI tarafından geliştirilmiş, ResNet ailesinin en modern versiyonudur. Vision Transformer'lar ile rekabet eden performansa sahiptir. ResNet50 de kullanılabilirdi, ancak ConvNeXt daha iyi gradient akışı, daha modern mimari blokları (depthwise conv, GELU, Layer Norm) ve daha iyi training dynamics sunar.
 
-**S: Custom CNN'iniz neden 4 blok?**
-C: 224x224 giriş boyutu, her blokta 2x downsample: 224→112→56→28→14. 4 bloktan sonra 14x14 feature map kalır, bu yeterli uzamsal bilgi içerir. 5. blok eklemek 7x7'ye düşürür ve küçük veri setinde overfitting riskini artırır. Kanal sayısı (32→64→128→256) progressif artışla derinleştikçe daha soyut özellikler öğrenir.
+**S: Custom CNN v2'de hangi yaratıcı özellikler var?**
+C: 5 ana yenilik: (1) **Stem** (7x7 büyük kernel) - CT'de geniş alandan ilk bakışı yakalar, (2) **Multi-Scale Block** - 1x1, 3x3, 5x5 paralel yollarla hem küçük hem büyük kanamaları tespit eder, (3) **SE Attention** - hangi feature kanallarının önemli olduğunu öğrenir, (4) **Residual bağlantılar** - gradient flow iyileştirir, derin ağ eğitilebilir, (5) **Classifier'da LayerNorm** - son katmanda da stabilizasyon. Mimari: Stem(224→56) → MultiScale(56) → ResidualSE×3(56→28→14→7) → GAP → FC(256→128→2).
+
+**S: SE Block ne işe yarıyor, neden eklediniz?**
+C: Squeeze-and-Excitation (Hu et al., 2018) her feature kanalının önemini öğrenir. Medikal görüntüde bazı kanallar kenar, bazıları doku, bazıları yoğunluk bilgisi taşır. SE Block model'e "kanama tespiti için hangi bilgi türü kritik?" sorusuna cevap öğretir. Reduction=8 ile parametre maliyeti minimum.
 
 **S: Neden Global Average Pooling kullandınız?**
 C: Flatten + Dense yerine GAP kullandık çünkü: (1) Parametresizdir - overfitting riski azalır, (2) Spatial bilgiyi doğal şekilde özetler, (3) Input boyutu değişse bile çalışır, (4) Grad-CAM gibi görselleştirme tekniklerinde daha iyi sonuç verir.
