@@ -135,10 +135,16 @@ def train_one_epoch(
             optimizer.zero_grad()
             outputs = model(mixed_images)
             loss = mixup_criterion(criterion, outputs, y_a, y_b, lam)
+            # Mixup'ta accuracy: orijinal label'lar ile hesapla (daha doğru)
+            _, predicted = outputs.max(1)
+            correct += (lam * predicted.eq(y_a).sum().item()
+                        + (1 - lam) * predicted.eq(y_b).sum().item())
         else:
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
+            _, predicted = outputs.max(1)
+            correct += predicted.eq(labels).sum().item()
 
         loss.backward()
 
@@ -149,9 +155,7 @@ def train_one_epoch(
         optimizer.step()
 
         running_loss += loss.item() * images.size(0)
-        _, predicted = outputs.max(1)
         total += labels.size(0)
-        correct += predicted.eq(labels).sum().item()
 
     epoch_loss = running_loss / total
     epoch_acc = correct / total
