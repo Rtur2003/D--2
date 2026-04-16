@@ -177,24 +177,28 @@ def predict_with_gradcam(image, model_choice: str):
 # ── Gradio Arayüzü ─────────────────────────────────────────────────────
 
 def create_interface():
-    """Profesyonel Gradio arayüzü."""
+    """Profesyonel Gradio arayuzu."""
+
+    custom_css = """
+    .main-title {text-align: center; margin-bottom: 0.5em;}
+    .warning-box {background-color: #fff3cd; border: 1px solid #ffc107;
+                  border-radius: 8px; padding: 10px; margin: 10px 0;}
+    .info-box {background-color: #e7f3ff; border: 1px solid #2196F3;
+               border-radius: 8px; padding: 10px; margin: 10px 0;}
+    """
 
     with gr.Blocks(
         title="Head CT Hemorrhage Classifier",
-        theme=gr.themes.Soft(primary_hue="blue", secondary_hue="red")
+        theme=gr.themes.Soft(primary_hue="blue", secondary_hue="red"),
+        css=custom_css
     ) as demo:
 
         gr.Markdown("""
-        # Head CT Hemorrhage Siniflandirma
+        # Head CT Hemorrhage Siniflandirma Sistemi
         ### BM 480 Derin Ogrenme - Proje 2
 
         Bir Head CT goruntusu yukleyin ve beyin kanamasi (hemorrhage) olup
         olmadigini yapay zeka ile tespit edin.
-
-        **3 Model Secenegi:**
-        - **ConvNeXt-Tiny**: ImageNet pre-trained transfer learning modeli
-        - **Custom CNN**: Ogrenci tarafindan tasarlanan ozgun mimari
-        - **Ensemble**: Iki modelin birlesimi (en guvenilir sonuc)
         """)
 
         with gr.Row():
@@ -213,6 +217,12 @@ def create_interface():
                     value="Ensemble (Birlesik - Onerilen)",
                     label="Model Secimi"
                 )
+                gr.Markdown("""
+                **Model Bilgileri:**
+                - **ConvNeXt-Tiny**: ImageNet uzerinde on-egitimli, transfer learning ile ince ayar yapilmis
+                - **Custom CNN**: Residual + SE Attention + Multi-Scale mimari (~1.5M parametre)
+                - **Ensemble**: Iki modelin agirlikli soft voting birlesimidir (en guvenilir)
+                """)
                 predict_btn = gr.Button(
                     "Tahmin Et",
                     variant="primary",
@@ -225,14 +235,19 @@ def create_interface():
                     num_top_classes=2
                 )
                 gradcam_output = gr.Image(
-                    label="Grad-CAM (Model neye bakiyor?)",
+                    label="Grad-CAM Isi Haritasi (Model neye bakiyor?)",
                     height=300
                 )
+                gr.Markdown("""
+                **Grad-CAM Yorumlama:**
+                Kirmizi/sari bolgeler modelin en cok dikkat ettigi alanlari gosterir.
+                Iyi bir model kanama bolgesine odaklanmalidir.
+                """)
 
         with gr.Row():
             detail_output = gr.Textbox(
-                label="Detayli Rapor",
-                lines=12,
+                label="Detayli Analiz Raporu",
+                lines=14,
                 interactive=False
             )
 
@@ -246,10 +261,11 @@ def create_interface():
         ---
         **Siniflar:** Normal (kanama yok) | Hemorrhage (beyin kanamasi)
 
-        **Grad-CAM:** Isil harita modelin CT'nin hangi bolgesine bakarak karar verdigini gosterir.
-        Kirmizi bolgeler = yuksek aktivasyon.
+        **Veri Seti:** 200 Head CT goruntusu (100 Normal, 100 Hemorrhage) - Stratified 70/15/15 split
 
-        *Not: Bu sistem egitim amaclidir. Tibbi teshis icin kullanilamaz.*
+        **Egitim Teknikleri:** Label Smoothing, Mixup, Cosine Annealing, Progressive Unfreezing, Gradient Clipping
+
+        > **Uyari:** Bu sistem yalnizca egitim ve arastirma amaclidir. Tibbi teshis icin kullanilamaz.
         """)
 
     return demo
