@@ -492,8 +492,8 @@ def run_training(augment: bool = True) -> None:
         custom_hparams = {
             **DEFAULT_HPARAMS,
             "learning_rate": 5e-4,  # Custom CNN'e daha yüksek lr
-            "epochs": 40,
-            "early_stopping_patience": 10,
+            "epochs": 35,
+            "early_stopping_patience": 7,
         }
 
         custom_history = train_model(
