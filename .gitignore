@@ -1,12 +1,21 @@
-# Model dosyalari (buyuk dosyalar)
+# Model dosyalari (buyuk dosyalar, >100MB GitHub limiti)
+models/*.pth
+models/*.pt
+*.pth
+*.pt
+
 # Python cache
 __pycache__/
 *.pyc
 *.pyo
 src/__pycache__/
 
-# Sonuclar (isteğe bağlı - grafikler git'e girmeyebilir)
+# Sonuclar (istege bagli - grafikler git'e girmeyebilir)
 # results/
+
+# Augmented goruntu cikti klasorleri (otomatik uretilir)
+augmented/
+aug_images/
 
 # OS
 .DS_Store
@@ -15,3 +24,8 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Python virtual env
+venv/
+.venv/
+env/
