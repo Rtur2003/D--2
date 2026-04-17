@@ -2,8 +2,6 @@
 ## Head CT Hemorrhage Classification
 ### Terimler, Kararlar, Neden Kullanıldı & Hoca Soruları
 
-> **Not:** Bu rehber hem savunma sırasında soruları yanıtlamak için "cep kitabı" niteliğinde hem de kod tabanını anlamayan birine projeyi baştan sona anlatabilecek detayda yazılmıştır. Her kararın *ne* olduğu kadar *neden* olduğu da açıklanır; her açıklamanın sonunda olası soruya direkt cevap vardır.
-
 ---
 
 ## 0. PROJE ŞARTNAMESİ UYUM KONTROLÜ (Proje2.docx)
