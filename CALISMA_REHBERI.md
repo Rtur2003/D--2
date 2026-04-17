@@ -677,8 +677,205 @@ C: **Data drift** (CT cihazı üreticisi yeni protokol yazdı) veya **concept dr
 
 **Sık unutulanlar:**
 - [ ] requirements.txt güncel
-- [ ] Modeller klasörünün GitHub'a yüklenmeyeceği (>100MB limit) — Google Drive linkini raporda paylaşın
+- [ ] Modeller `download_models.py` ile GitHub Releases'tan indirilir (100MB+ limit sorunu çözülü)
 - [ ] Akış şeması raporda yer alıyor
 - [ ] Literatür tablosu 5 makale dolu
 - [ ] Kod çalıştırılabilir (farklı makinede test et)
 - [ ] README.md varsa güncel
+- [ ] **Feature CSV** (`results/features_test.csv`) teslim dosyaları içinde (hoca istedi)
+
+---
+
+## 13. HOCANIN TESLİM KRİTERLERİ (17 Nisan 2026 sunum duyurusu)
+
+| Alan | Ağırlık | Karşılık |
+|------|---------|----------|
+| Proje dosyaları (Python + requirements + GUI + **feature CSV**) | %50 | `src/`, `main.py`, `requirements.txt`, `src/app.py`, `results/features_test.csv` |
+| Word raporu | %50 (şu dağılımda) | `docs/` içinde hazırlanacak (arkadaşlar) |
+| — Template (IEEE formatı) | 5 puan | `project_template.docx` baz alınır |
+| — Makaleler (5 IEEE Xplore 2025) | 10 puan | §11 arama stratejisi + seçilen makaleler |
+| — Akış şeması | 10 puan | §1 şeması rapora geçirilir |
+| — Veri seti kullanımı | 10 puan | §0 uyum tablosu + §9 benzer veri setleri |
+| — Performans testleri + sonuç | 15 puan | `results/*_metrics.json`, CM/ROC/PR/t-SNE görseller |
+
+**Sunum Değerlendirme (herkes konuşmalı; gelmeyen 0):**
+1. Proje kütüphaneleri (requirements + PyTorch/timm/albumentations/gradio)
+2. Kendi mimarin (Custom CNN) + pre-trained modele (ConvNeXt-Tiny) hakimiyet
+3. Test görüntüleri üzerindeki başarı (metrics tablosu + Grad-CAM)
+
+**İntihal uyarısı:** Proje 1'de bazı gruplarda intihal tespit edildi → her iki taraf 0. Rapora kopyalarken §16 kaynakçayı atıf olarak kullanın.
+
+---
+
+## 14. FEATURE CSV (Hoca Gerekli Kıldı)
+
+**Ne:** Her test görüntüsü için modelin son konvolüsyon bloğundan (ya da GAP sonrası) çıkardığı özellik vektörü + etiket + dosya adı. "Feature extraction" klasik ML alanında olduğu gibi, derin öğrenmede penultimate-layer embedding'e karşılık gelir.
+
+**Nasıl:** `src/extract_features.py` her iki modelle test setini ileri geçirir, classifier'dan önceki aktivasyonları kaydeder.
+- ConvNeXt-Tiny → `forward_features` çıkışı → global pool (768-D vektör)
+- Custom CNN → GAP sonrası FC öncesi (128-D vektör)
+
+**Çıktılar:**
+- `results/features_convnext_test.csv` — 30 satır × 771 sütun (filename, label, f000..f767)
+- `results/features_custom_cnn_test.csv` — 30 satır × 131 sütun (filename, label, f000..f127)
+- `results/features_test.csv` — birleşik (opsiyonel, PCA-256 ile sıkıştırılmış)
+
+**Savunma cevabı:** Feature CSV, classifier'dan önceki gömme vektörlerini içerir; bu vektörler üzerinden t-SNE / kNN / lojistik regresyon kurulabilir. Derin öğrenme çıkardığı feature'lar klasik feature engineering'in yerine geçer.
+
+---
+
+## 15. v2 — GENİŞLETİLMİŞ VERİ SETİYLE İKİNCİ DENEY (Nisan 2026)
+
+v1 taglanıp kilitlendi; v2 `v2/` klasöründe paralel yürüyor. v1 yapısı (1 transfer + 1 from-scratch, stratified split, aynı metrikler) birebir korunur; değişen tek şey **veri büyüklüğü**.
+
+### 15.1 Neden v2?
+- v1'de 200 görüntü (100/100) vardı → 15 test görüntüsünde Custom CNN %86.67 → 1-2 yanlış tahmin accuracy'i ~%6 sarsıyor.
+- Büyük veri + hasta bazlı split → daha güvenilir generalization tahmini, daha stabil sonuçlar.
+- Hocanın beğendiği "iyi sonuçlar" için veri tarafında elimizi güçlendirir.
+
+### 15.2 Yeni Veri Seti Bileşimi
+
+| Kaynak | Görüntü | Hasta | Etiket Granülarıtesi | Lisans |
+|--------|---------|-------|-----------------------|--------|
+| `abdulkader90/brain-ct-hemorrhage-dataset` (Kaggle) | 6795 JPG | 45 (27 Normal + 18 Hemorrhagic) | Hasta-seviyesi (tüm dilimler aynı etiket) | Kaggle public |
+| `vbookshelf/computed-tomography-ct-images` (Kaggle) | 2501 JPG | 82 | **Dilim-seviyesi** (her slice ayrı etiket — `hemorrhage_diagnosis.csv`) | Other (araştırma amaçlı serbest) |
+| **TOPLAM** | **9296** | **127** | Karma | — |
+
+Dağılım: Normal **6288 (%67.6)**, Hemorrhage **3008 (%32.4)** → hafif dengesizlik. Stratified split + label smoothing yeterli; ağırlıklı loss'a gerek yok (dengesizlik <1:3).
+
+### 15.3 Dilim-Seviyesi Etiket Belirsizliği (Sizin sorduğunuz)
+
+**Problem:** Abdulkader veri setinde hastanın tüm dilimleri aynı klasörde. Hemorrhagic bir hastanın 100 diliminin hepsi "hemorrhage" etiketini alıyor — ama ilk/son 10-15 dilim kafatası tabanı veya vertex bölgesi (kanama görünmez). Bu **noisy label**.
+
+**Vbookshelf'te yok:** CSV'de her (PatientNumber, SliceNumber) için `No_Hemorrhage` sütunu var — dilim-seviyesi doğru etiket.
+
+**Çözüm (build_labels.py'de uygulanacak filtre):**
+1. Vbookshelf: CSV'deki etiketi olduğu gibi kullan (zaten doğru).
+2. Abdulkader Hemorrhagic: Her hastanın dilimlerini sırala, **ilk %15 ve son %15'i at** (toplam %30 kırp). Kalan orta %70 kanamayı görme olasılığı yüksek olan orta kesitler.
+3. Abdulkader Normal: Tüm dilimler tutulur (normal beyin her kesitte normal).
+
+**Alternatif kabul edilmedi:** Sadece vbookshelf kullanmak temiz olurdu (2501 görüntü, 82 hasta). Fakat büyük veri avantajını kaybederdik. Noisy label + filtre yaklaşımı daha iyi kompromi.
+
+**Sizin gözleminiz doğru:** Aynı hastanın ardışık dilimleri → uzaysal korelasyon var. Hasta bazlı split bu yüzden **zorunlu** (aynı hastanın dilimleri train ve test'te olursa *slice leakage* olur, accuracy yapay şişer). `v2/scripts/split.py` bunu garantiliyor.
+
+### 15.4 Parametre Sayısı — 1.3M "fazla" mı?
+
+**Hayır, tam tersine küçük.** Karşılaştırma:
+| Model | Parametre | Not |
+|-------|-----------|-----|
+| Custom CNN (bizimki) | **1.3M** | Az veriye göre ideal |
+| EfficientNet-B0 | 5.3M | Arkadaşlar denemiş |
+| ResNet50 | 25M | Arkadaşlar denemiş |
+| ConvNeXt-Tiny (bizimki) | 28M | Transfer learning |
+| ViT-Base | 86M | Transfer learning |
+| ConvNeXt-Large | 198M | Büyük veri gerektirir |
+
+**Kural:** Parametre sayısı ~ veri sayısı × 10 — 20 oranında olmalı (10×N ≤ param ≤ 100×N rehber). 200 görüntüde 1.3M parametre zaten sınırı zorluyor (regularization'la tutuyoruz). 9296 görüntüde 1.3M çok rahat çalışır.
+
+### 15.5 Arkadaşların Setup'ı (ResNet50 vs EfficientNet-B0)
+
+| Model | Yıl | ImageNet Top-1 | Parametre |
+|-------|-----|----------------|-----------|
+| ResNet50 | 2015 | %76.1 | 25M |
+| EfficientNet-B0 | 2019 | %77.1 | 5.3M |
+| ConvNeXt-Tiny (bizim) | 2022 | **%82.1** | 28M |
+
+**Savunma cevabı:** "Arkadaş grupları klasik ResNet50 ve EfficientNet-B0 denemiş; biz bunun yerine 2022 çıkışlı ConvNeXt-Tiny seçtik. ConvNeXt transformer'dan esinlenen (large kernel, LayerScale, GRN) modern bir CNN olup ImageNet'te ResNet50'yi 6 puan geçer. Binary tıbbi görev için de transfer kalitesi daha yüksek."
+
+### 15.6 Varsayılan Değerlerin Savunması (Sizin sorduğunuz)
+
+| Parametre | Değer | Gerekçe |
+|-----------|-------|---------|
+| `random_state` | **42** | De-facto standart (sklearn docs, Kaggle notebooks). Tekrarlanabilirlik için. Herhangi sabit tohum çalışır; 42 seçim reviewer'lar için tanıdık. |
+| `num_workers` | **4** (Windows'ta 0 güvenli) | CPU-GPU overlap; Windows'ta `fork` olmadığı için fazla worker spawn overhead'i yapar. |
+| `pin_memory` | **True** | CUDA'ya daha hızlı transfer. |
+| `drop_last` | **False** (train), False (val/test) | 200 gibi küçük sette son batch'i atmak bilgi kaybı. Mixup'ta yarım batch sorun yok. |
+| `persistent_workers` | **True** (Linux), False (Windows) | Epoch başlarında worker respawn maliyetini azaltır. |
+| `amp` / `mixed_precision` | **True** (CUDA varsa) | VRAM %40 azalır, hız %30-50 artar; fp16-stable eğitim. |
+| `gradient_clip_norm` | **1.0** | Standart değer; 0.5 çok kısıtlayıcı, 5.0 çoğu durumda işe yaramaz. |
+| `label_smoothing` | **0.05-0.1** | Overconfidence'ı önler; küçük verilerde 0.1 güvenli, büyük verilerde 0.05 yeterli. |
+| `mixup_alpha` | **0.2** | Beta(0.2, 0.2) → çoğu zaman saf örnek, ara sıra karışım; dengeli regularization. |
+| `warmup_epochs` | **3** (toplam epoch'un %10'u) | LR'yi aniden uygulamak ilk iterasyonlarda instability yaratır; cosine annealing öncesi ısınma. |
+| `early_stopping_patience` | **7** (v1) / **5** (v2) | Küçük verilerde 7, büyük verilerde 5 yeterli (daha az epoch gereksinim). |
+| `cosine_T_0` (warm restarts) | **10** epoch | Her 10 epoch'ta LR sıfıra yaklaşıp restart; plateau'dan kaçma. |
+| `ensemble_weight_search` | `arange(0.0, 1.01, 0.05)` | 21 nokta → pratik çözünürlük; daha ince (0.01) marjinal fayda. |
+
+### 15.7 v2 Eğitim Planı
+
+```
+v2/
+├── data_raw/             (indirildi, 9296 görüntü)
+├── labels.csv            (üretildi)
+├── train.csv / val.csv / test.csv    (hasta-bazlı 70/15/15 split)
+├── scripts/
+│   ├── build_labels.py   ✓
+│   ├── split.py          ✓
+│   ├── filter_slices.py  (yapılacak — edge slices kırpma)
+│   └── compute_stats.py  (train mean/std)
+├── src/                  (v1'in src/'ini clone edip labels.csv'den okuyacak)
+└── results/              (v2 metrikleri)
+```
+
+### 15.8 Beklenen İyileşme
+
+v1 sonuçları (200 görüntü):
+- ConvNeXt: %96.67 (1 FN)
+- Custom CNN: %86.67
+- Ensemble: %96.67
+
+v2 beklentisi (9296 görüntü, hasta-bazlı split):
+- ConvNeXt: **%93-95** (test daha zorlu; edge-slice noise + daha fazla patient diversity)
+- Custom CNN: **%88-92** (daha fazla veri → from-scratch daha iyi öğrenir)
+- Ensemble: **%94-96**
+
+⚠️ v2 accuracy'si v1'den düşebilir — **bu kötü değil**. v1'in yüksek sonucu 15 görüntülük çok küçük test setinin istatistiksel gürültüsü. v2'nin 1435 test görüntüsü gerçek generalization'ı gösterir. Savunmada bu nüansı açık anlatmak gerekir: "daha güvenilir = daha düşük ama daha anlamlı".
+
+---
+
+## 16. KAYNAKÇA (IEEE formatı)
+
+**Mimariler:**
+1. Z. Liu, H. Mao, C.-Y. Wu, C. Feichtenhofer, T. Darrell, and S. Xie, "A ConvNet for the 2020s," *CVPR 2022*, pp. 11976–11986.
+2. K. He, X. Zhang, S. Ren, and J. Sun, "Deep Residual Learning for Image Recognition," *CVPR 2016*, pp. 770–778.
+3. J. Hu, L. Shen, and G. Sun, "Squeeze-and-Excitation Networks," *CVPR 2018*, pp. 7132–7141.
+4. M. Tan and Q. V. Le, "EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks," *ICML 2019*.
+
+**Eğitim Teknikleri:**
+5. I. Loshchilov and F. Hutter, "Decoupled Weight Decay Regularization (AdamW)," *ICLR 2019*.
+6. I. Loshchilov and F. Hutter, "SGDR: Stochastic Gradient Descent with Warm Restarts," *ICLR 2017*.
+7. H. Zhang, M. Cisse, Y. N. Dauphin, and D. Lopez-Paz, "mixup: Beyond Empirical Risk Minimization," *ICLR 2018*.
+8. C. Szegedy *et al.*, "Rethinking the Inception Architecture for Computer Vision" (Label Smoothing), *CVPR 2016*.
+9. S. Ioffe and C. Szegedy, "Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift," *ICML 2015*.
+10. G. Huang, Y. Sun, Z. Liu, D. Sedra, and K. Weinberger, "Deep Networks with Stochastic Depth," *ECCV 2016*.
+
+**Açıklanabilirlik & Değerlendirme:**
+11. R. R. Selvaraju *et al.*, "Grad-CAM: Visual Explanations from Deep Networks via Gradient-based Localization," *ICCV 2017*.
+12. L. van der Maaten and G. Hinton, "Visualizing Data using t-SNE," *JMLR 2008*.
+13. T. Fawcett, "An introduction to ROC analysis," *Pattern Recognition Letters*, 2006.
+
+**Medikal Uygulamalar (Baseline Paper'lar):**
+14. P. Chilamkurthy *et al.*, "Deep learning algorithms for detection of critical findings in head CT scans (CQ500)," *The Lancet*, 2018.
+15. A. Majumdar *et al.*, "Intracranial Hemorrhage Detection Challenge 2019 (RSNA)," *Radiology: AI*, 2020.
+16. A. Hssayeni *et al.*, "Intracranial Hemorrhage Segmentation Using a Deep Convolutional Model," *Data in Brief*, 2020.
+
+**Veri Seti Kaynakları:**
+17. F. C. Kitamura, "Head CT - Hemorrhage (Kaggle dataset)," 2017. [Online]. Available: https://www.kaggle.com/datasets/felipekitamura/head-ct-hemorrhage
+18. Vbookshelf, "Brain CT Images with Intracranial Hemorrhage Masks (Kaggle)," 2019. [Online].
+19. A. Kader, "Brain CT Hemorrhage Dataset (Kaggle)," 2021. [Online].
+
+**Augmentation:**
+20. A. Buslaev *et al.*, "Albumentations: Fast and Flexible Image Augmentations," *Information*, 2020.
+
+**Framework & Kütüphane:**
+21. A. Paszke *et al.*, "PyTorch: An Imperative Style, High-Performance Deep Learning Library," *NeurIPS 2019*.
+22. R. Wightman, "PyTorch Image Models (timm)," GitHub repository, 2019+.
+23. A. Abid *et al.*, "Gradio: Hassle-Free Sharing and Testing of ML Models in the Wild," *ICML Workshop*, 2019.
+
+**2025 IEEE Xplore (seçilecek — §11'deki search string'e göre):**
+24. *[TBD — arama anahtarları: "intracranial hemorrhage detection", "CT", "transfer learning", 2025, IEEE Xplore]*
+25. *[TBD]*
+26. *[TBD]*
+27. *[TBD]*
+28. *[TBD]*
+
+**Not:** 24-28 arası rapor yazılırken arkadaşlar tarafından doldurulacak. Arama: `IEEE Xplore > Advanced Search > "intracranial hemorrhage" AND "CT" AND ("deep learning" OR "convolutional") > Year: 2025 > Conference Publications`.
