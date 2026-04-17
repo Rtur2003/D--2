@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(mkdir -p \"d:/D--2/v1\")",
+      "Bash(mv head_ct labels.csv main.py models results src web_crawled_test download_models.py requirements.txt v1/)",
+      "Bash(python src/extract_features.py)",
+      "Bash(python scripts/filter_slices.py)"
     ]
   }
 }

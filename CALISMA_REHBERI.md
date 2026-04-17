@@ -450,29 +450,27 @@ DÖ-2/
 
 ## 6. ÇALIŞTIRMA KILAVUZU
 
+Kök dizinde iki alt proje: **v1/** (200 görüntü, felipekitamura) ve **v2/** (8490 görüntü, abdulkader+vbookshelf).
+
 ```bash
-# 1. Bağımlılıkları yükle
+# --- v1: mevcut kucuk dataset (rapor ana sonuclari) ---
+cd v1
 pip install -r requirements.txt
+python download_models.py            # GitHub Releases'ten .pth
+python main.py                       # tuning + train + eval
+python main.py --train               # sadece egitim
+python main.py --eval                # sadece degerlendirme
+python main.py --app                 # Gradio (http://localhost:7860)
+python main.py --webcrawl            # sunum icin ek testler
+python src/extract_features.py       # feature CSV (hoca istiyor)
 
-# 1a. (İlk kurulumda) Modelleri GitHub Releases'ten indir
-python download_models.py
-
-# 2. Tüm pipeline'ı çalıştır (augmentation + tuning + train + eval)
-python main.py
-
-# 3. Sadece eğitim
-python main.py --train
-
-# 4. Sadece değerlendirme (eğitim sonrası)
-python main.py --eval
-
-# 5. Arayüzü başlat
-python main.py --app
-# Tarayıcıda http://localhost:7860 adresine git
-
-# 6. Sunum için web-crawled görüntüleri test et
-# Önce web_crawled_test/ klasörüne CT görüntüleri koy
-python main.py --webcrawl
+# --- v2: genisletilmis dataset ---
+cd ../v2
+python scripts/build_labels.py       # iki Kaggle kaynagini birlesik manifest'e
+python scripts/filter_slices.py      # abdulkader Hemorrhagic edge-slice trim
+python scripts/split.py              # hasta-bazli 70/15/15
+python main.py --train               # egitim (src/ v1'den kopya, labels.csv bazli)
+python main.py --eval                # degerlendirme
 ```
 
 ---
