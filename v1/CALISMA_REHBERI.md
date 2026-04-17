@@ -722,110 +722,54 @@ C: **Data drift** (CT cihazı üreticisi yeni protokol yazdı) veya **concept dr
 
 ---
 
-## 15. v2 — GENİŞLETİLMİŞ VERİ SETİYLE İKİNCİ DENEY (Nisan 2026)
+## 15. SAVUNMA — VARSAYILAN DEĞERLER VE KARŞILAŞTIRMALAR
 
-v1 tag'li, `v2/` klasöründe paralel ikinci deney. v1 yapısı (1 transfer + 1 from-scratch, stratified split, aynı metrikler) korunur; değişen tek şey **veri büyüklüğü**.
+> v2 çalışması için üretilen bu içerik v1'i de doğrudan savunur: aynı hiperparametre mantığı, aynı mimari seçim gerekçeleri. v2'nin genişletilmiş veri seti deneyi için ayrı kılavuz → `v2/CALISMA_REHBERI.md`.
 
-### 15.1 Neden v2?
-- v1'de 15 test görüntüsü → 1 yanlış tahmin %6.67 accuracy kaybı (istatistiksel gürültü).
-- Büyük veri + hasta bazlı split → güvenilir generalization.
+### 15.1 Varsayılan Değerlerin Gerekçesi
 
-### 15.2 Yeni Veri Seti Bileşimi
+Hoca "her varsayılanı savun" diyor — `random_state=42` dahil. Projede kullanılan sabitlerin tek tek gerekçesi:
 
-| Kaynak | Görüntü | Hasta | Etiket Granülarıtesi | Lisans |
-|--------|---------|-------|-----------------------|--------|
-| `abdulkader90/brain-ct-hemorrhage-dataset` (Kaggle) | 6795 JPG | 45 (27 Normal + 18 Hemorrhagic) | Hasta-seviyesi (tüm dilimler aynı etiket) | Kaggle public |
-| `vbookshelf/computed-tomography-ct-images` (Kaggle) | 2501 JPG | 82 | **Dilim-seviyesi** (her slice ayrı etiket — `hemorrhage_diagnosis.csv`) | Other (araştırma amaçlı serbest) |
-| **TOPLAM** | **9296** | **127** | Karma | — |
+| Parametre | Değer | Gerekçe |
+|-----------|-------|---------|
+| `random_state` | **42** | De-facto standart (sklearn docs, Kaggle notebooks). Tekrarlanabilirlik için herhangi sabit tohum çalışır; 42 reviewer'lar için tanıdık. |
+| `num_workers` | **0 (Windows) / 4 (Linux)** | Windows'ta `fork` olmadığından fazla worker spawn overhead'i yapar. Linux'ta CPU-GPU overlap sağlanır. |
+| `pin_memory` | **True** | CUDA'ya daha hızlı host→device transferi. |
+| `drop_last` | **False** (train/val/test) | 200 gibi küçük sette son batch'i atmak bilgi kaybı. Mixup yarım batch'te sorun yapmaz. |
+| `persistent_workers` | **True (Linux)** / False (Windows) | Epoch başlarında worker respawn maliyetini azaltır. |
+| `amp` / `mixed_precision` | **True** (CUDA varsa) | VRAM %40 azalır, hız %30-50 artar; fp16-stable eğitim. |
+| `gradient_clip_norm` | **1.0** | Standart değer; 0.5 çok kısıtlayıcı, 5.0 çoğu durumda işe yaramaz. |
+| `label_smoothing` | **0.05–0.1** | Overconfidence'ı önler; küçük veride 0.1 güvenli, büyük veride 0.05 yeterli. |
+| `mixup_alpha` | **0.2** | Beta(0.2, 0.2) → çoğu zaman saf örnek, ara sıra karışım; dengeli regularization. |
+| `warmup_epochs` | **3** (≈ toplam epoch'un %10'u) | LR'yi aniden uygulamak ilk iterasyonlarda instability yaratır; cosine annealing öncesi ısınma. |
+| `early_stopping_patience` | **7 (v1) / 5 (v2)** | Küçük veride 7, büyük veride 5 yeterli (daha hızlı yakınsama). |
+| `cosine_T_0` (warm restarts) | **10** epoch | Her 10 epoch'ta LR sıfıra yaklaşıp restart; plateau'dan kaçma. |
+| `ensemble_weight_search` | `arange(0.0, 1.01, 0.05)` | 21 nokta → pratik çözünürlük; daha ince (0.01) marjinal fayda. |
 
-Dağılım: Normal **6288 (%67.6)**, Hemorrhage **3008 (%32.4)** → hafif dengesizlik. Stratified split + label smoothing yeterli; ağırlıklı loss'a gerek yok (dengesizlik <1:3).
+### 15.2 Parametre Sayısı — 1.3M "fazla" mı?
 
-### 15.3 Dilim-Seviyesi Etiket Belirsizliği (Sizin sorduğunuz)
+Savunma sorusu: "Custom CNN 1.3M parametre — çok değil mi?" Karşılaştırma tablosu:
 
-**Problem:** Abdulkader veri setinde hastanın tüm dilimleri aynı klasörde. Hemorrhagic bir hastanın 100 diliminin hepsi "hemorrhage" etiketini alıyor — ama ilk/son 10-15 dilim kafatası tabanı veya vertex bölgesi (kanama görünmez). Bu **noisy label**.
-
-**Vbookshelf'te yok:** CSV'de her (PatientNumber, SliceNumber) için `No_Hemorrhage` sütunu var — dilim-seviyesi doğru etiket.
-
-**Çözüm (build_labels.py'de uygulanacak filtre):**
-1. Vbookshelf: CSV'deki etiketi olduğu gibi kullan (zaten doğru).
-2. Abdulkader Hemorrhagic: Her hastanın dilimlerini sırala, **ilk %15 ve son %15'i at** (toplam %30 kırp). Kalan orta %70 kanamayı görme olasılığı yüksek olan orta kesitler.
-3. Abdulkader Normal: Tüm dilimler tutulur (normal beyin her kesitte normal).
-
-**Alternatif kabul edilmedi:** Sadece vbookshelf kullanmak temiz olurdu (2501 görüntü, 82 hasta). Fakat büyük veri avantajını kaybederdik. Noisy label + filtre yaklaşımı daha iyi kompromi.
-
-**Sizin gözleminiz doğru:** Aynı hastanın ardışık dilimleri → uzaysal korelasyon var. Hasta bazlı split bu yüzden **zorunlu** (aynı hastanın dilimleri train ve test'te olursa *slice leakage* olur, accuracy yapay şişer). `v2/scripts/split.py` bunu garantiliyor.
-
-### 15.4 Parametre Sayısı — 1.3M "fazla" mı?
-
-**Hayır, tam tersine küçük.** Karşılaştırma:
 | Model | Parametre | Not |
 |-------|-----------|-----|
-| Custom CNN (bizimki) | **1.3M** | Az veriye göre ideal |
-| EfficientNet-B0 | 5.3M | Arkadaşlar denemiş |
-| ResNet50 | 25M | Arkadaşlar denemiş |
-| ConvNeXt-Tiny (bizimki) | 28M | Transfer learning |
+| **Custom CNN (bizim)** | **1.3M** | Az veriye uygun tasarım |
+| EfficientNet-B0 | 5.3M | Arkadaşların denediği |
+| ResNet50 | 25M | Arkadaşların denediği |
+| **ConvNeXt-Tiny (bizim)** | **28M** | Transfer learning |
 | ViT-Base | 86M | Transfer learning |
 | ConvNeXt-Large | 198M | Büyük veri gerektirir |
 
-**Kural:** Parametre sayısı ~ veri sayısı × 10 — 20 oranında olmalı (10×N ≤ param ≤ 100×N rehber). 200 görüntüde 1.3M parametre zaten sınırı zorluyor (regularization'la tutuyoruz). 9296 görüntüde 1.3M çok rahat çalışır.
+**Kural:** Parametre sayısı ~ veri × 10 oranında olmalı (10N ≤ params ≤ 100N rehberi). 200 görüntüde 1.3M sınırı zorluyor — bu yüzden dropout, SE attention ve heavy augmentation ile tutuyoruz.
 
-### 15.5 Arkadaşların Setup'ı (ResNet50 vs EfficientNet-B0)
+### 15.3 Arkadaşların Setup'ı (ResNet50 / EfficientNet-B0)
 
 | Model | Yıl | ImageNet Top-1 | Parametre |
 |-------|-----|----------------|-----------|
 | ResNet50 | 2015 | %76.1 | 25M |
 | EfficientNet-B0 | 2019 | %77.1 | 5.3M |
-| ConvNeXt-Tiny (bizim) | 2022 | **%82.1** | 28M |
+| **ConvNeXt-Tiny (bizim)** | **2022** | **%82.1** | 28M |
 
-**Savunma cevabı:** "Arkadaş grupları klasik ResNet50 ve EfficientNet-B0 denemiş; biz bunun yerine 2022 çıkışlı ConvNeXt-Tiny seçtik. ConvNeXt transformer'dan esinlenen (large kernel, LayerScale, GRN) modern bir CNN olup ImageNet'te ResNet50'yi 6 puan geçer. Binary tıbbi görev için de transfer kalitesi daha yüksek."
-
-### 15.6 Varsayılan Değerlerin Savunması (Sizin sorduğunuz)
-
-| Parametre | Değer | Gerekçe |
-|-----------|-------|---------|
-| `random_state` | **42** | De-facto standart (sklearn docs, Kaggle notebooks). Tekrarlanabilirlik için. Herhangi sabit tohum çalışır; 42 seçim reviewer'lar için tanıdık. |
-| `num_workers` | **4** (Windows'ta 0 güvenli) | CPU-GPU overlap; Windows'ta `fork` olmadığı için fazla worker spawn overhead'i yapar. |
-| `pin_memory` | **True** | CUDA'ya daha hızlı transfer. |
-| `drop_last` | **False** (train), False (val/test) | 200 gibi küçük sette son batch'i atmak bilgi kaybı. Mixup'ta yarım batch sorun yok. |
-| `persistent_workers` | **True** (Linux), False (Windows) | Epoch başlarında worker respawn maliyetini azaltır. |
-| `amp` / `mixed_precision` | **True** (CUDA varsa) | VRAM %40 azalır, hız %30-50 artar; fp16-stable eğitim. |
-| `gradient_clip_norm` | **1.0** | Standart değer; 0.5 çok kısıtlayıcı, 5.0 çoğu durumda işe yaramaz. |
-| `label_smoothing` | **0.05-0.1** | Overconfidence'ı önler; küçük verilerde 0.1 güvenli, büyük verilerde 0.05 yeterli. |
-| `mixup_alpha` | **0.2** | Beta(0.2, 0.2) → çoğu zaman saf örnek, ara sıra karışım; dengeli regularization. |
-| `warmup_epochs` | **3** (toplam epoch'un %10'u) | LR'yi aniden uygulamak ilk iterasyonlarda instability yaratır; cosine annealing öncesi ısınma. |
-| `early_stopping_patience` | **7** (v1) / **5** (v2) | Küçük verilerde 7, büyük verilerde 5 yeterli (daha az epoch gereksinim). |
-| `cosine_T_0` (warm restarts) | **10** epoch | Her 10 epoch'ta LR sıfıra yaklaşıp restart; plateau'dan kaçma. |
-| `ensemble_weight_search` | `arange(0.0, 1.01, 0.05)` | 21 nokta → pratik çözünürlük; daha ince (0.01) marjinal fayda. |
-
-### 15.7 v2 Eğitim Planı
-
-```
-v2/
-├── data_raw/             (indirildi, 9296 görüntü)
-├── labels.csv            (üretildi)
-├── train.csv / val.csv / test.csv    (hasta-bazlı 70/15/15 split)
-├── scripts/
-│   ├── build_labels.py   ✓
-│   ├── split.py          ✓
-│   ├── filter_slices.py  (yapılacak — edge slices kırpma)
-│   └── compute_stats.py  (train mean/std)
-├── src/                  (v1'in src/'ini clone edip labels.csv'den okuyacak)
-└── results/              (v2 metrikleri)
-```
-
-### 15.8 Beklenen İyileşme
-
-v1 sonuçları (200 görüntü):
-- ConvNeXt: %96.67 (1 FN)
-- Custom CNN: %86.67
-- Ensemble: %96.67
-
-v2 beklentisi (9296 görüntü, hasta-bazlı split):
-- ConvNeXt: **%93-95** (test daha zorlu; edge-slice noise + daha fazla patient diversity)
-- Custom CNN: **%88-92** (daha fazla veri → from-scratch daha iyi öğrenir)
-- Ensemble: **%94-96**
-
-⚠️ v2 accuracy'si v1'den düşebilir — **bu kötü değil**. v1'in yüksek sonucu 15 görüntülük çok küçük test setinin istatistiksel gürültüsü. v2'nin 1435 test görüntüsü gerçek generalization'ı gösterir. Savunmada bu nüansı açık anlatmak gerekir: "daha güvenilir = daha düşük ama daha anlamlı".
+**Savunma cevabı:** "Arkadaş grupları klasik ResNet50 ve EfficientNet-B0 denemiş; biz 2022 çıkışlı ConvNeXt-Tiny'yi seçtik. ConvNeXt, transformer'dan esinlenen (large kernel, LayerScale, GRN) modern bir CNN — ImageNet'te ResNet50'yi 6 puan geçer. Binary tıbbi görev için transfer kalitesi daha yüksek."
 
 ---
 

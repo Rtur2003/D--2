@@ -8,7 +8,14 @@
       "Bash(python scripts/filter_slices.py)",
       "Bash(python -c \"import torch; print\\('torch:', torch.__version__\\); print\\('cuda available:', torch.cuda.is_available\\(\\)\\); print\\('cuda built:', torch.version.cuda\\); print\\('device count:', torch.cuda.device_count\\(\\)\\); print\\('device name:', torch.cuda.get_device_name\\(0\\) if torch.cuda.is_available\\(\\) else 'N/A'\\)\")",
       "Bash(pip uninstall *)",
-      "Bash(python scripts/audit_brain_content.py)"
+      "Bash(python scripts/audit_brain_content.py)",
+      "Bash(python -c \"import torch; print\\('torch:', torch.__version__\\); print\\('cuda:', torch.cuda.is_available\\(\\)\\); print\\('gpu:', torch.cuda.get_device_name\\(0\\) if torch.cuda.is_available\\(\\) else 'N/A'\\)\")",
+      "Bash(\"d:/D--2/.venv/Scripts/python.exe\" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126)",
+      "Bash(\"d:/D--2/.venv/Scripts/python.exe\" -c \"import torch; print\\('torch:', torch.__version__\\); print\\('cuda:', torch.cuda.is_available\\(\\)\\); print\\('gpu:', torch.cuda.get_device_name\\(0\\) if torch.cuda.is_available\\(\\) else 'N/A'\\); print\\('vram GB:', torch.cuda.get_device_properties\\(0\\).total_memory/1e9 if torch.cuda.is_available\\(\\) else 'N/A'\\)\")",
+      "Bash(\"d:/D--2/.venv/Scripts/python.exe\" -m ensurepip --upgrade)",
+      "Bash(\"d:/D--2/.venv/Scripts/python.exe\" -c \"import torch; print\\('torch:', torch.__version__\\); print\\('cuda:', torch.cuda.is_available\\(\\)\\); print\\('gpu:', torch.cuda.get_device_name\\(0\\) if torch.cuda.is_available\\(\\) else 'N/A'\\); print\\('vram:', f'{torch.cuda.get_device_properties\\(0\\).total_memory/1e9:.2f} GB' if torch.cuda.is_available\\(\\) else 'N/A'\\)\")",
+      "Bash(\"d:/D--2/.venv/Scripts/python.exe\" -m pip install --force-reinstall --no-deps torch torchvision --index-url https://download.pytorch.org/whl/cu126)",
+      "Bash(\"d:/D--2/.venv/Scripts/python.exe\" -c \"import torch; print\\(torch.__version__, 'cuda:', torch.cuda.is_available\\(\\)\\)\")"
     ]
   }
 }
