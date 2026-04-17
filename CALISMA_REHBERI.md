@@ -726,12 +726,11 @@ C: **Data drift** (CT cihazı üreticisi yeni protokol yazdı) veya **concept dr
 
 ## 15. v2 — GENİŞLETİLMİŞ VERİ SETİYLE İKİNCİ DENEY (Nisan 2026)
 
-v1 taglanıp kilitlendi; v2 `v2/` klasöründe paralel yürüyor. v1 yapısı (1 transfer + 1 from-scratch, stratified split, aynı metrikler) birebir korunur; değişen tek şey **veri büyüklüğü**.
+v1 tag'li, `v2/` klasöründe paralel ikinci deney. v1 yapısı (1 transfer + 1 from-scratch, stratified split, aynı metrikler) korunur; değişen tek şey **veri büyüklüğü**.
 
 ### 15.1 Neden v2?
-- v1'de 200 görüntü (100/100) vardı → 15 test görüntüsünde Custom CNN %86.67 → 1-2 yanlış tahmin accuracy'i ~%6 sarsıyor.
-- Büyük veri + hasta bazlı split → daha güvenilir generalization tahmini, daha stabil sonuçlar.
-- Hocanın beğendiği "iyi sonuçlar" için veri tarafında elimizi güçlendirir.
+- v1'de 15 test görüntüsü → 1 yanlış tahmin %6.67 accuracy kaybı (istatistiksel gürültü).
+- Büyük veri + hasta bazlı split → güvenilir generalization.
 
 ### 15.2 Yeni Veri Seti Bileşimi
 
