@@ -512,3 +512,169 @@ python main.py --webcrawl
 6. **Data Leakage Farkındalığı**: Normalizasyon, augmentation, split sıralaması bilinçli ve kurala uygun.
 
 7. **Arayüzde Grad-CAM**: Sadece tahmin değil, "neden bu tahmin" sorusuna da cevap veren arayüz.
+
+---
+
+## 9. BENZER VERİ SETLERİ (Eğitim/Test Genişletme İçin)
+
+Proje küçük bir veri setiyle (200 görüntü) başladı. Aynı konuda (head CT hemorrhage) daha büyük veya ek veri arayışınız varsa şu halka açık veri setleri kullanılabilir. Web-crawling yerine / ile birlikte bu veri setlerinden örnek test görüntüleri çekilebilir.
+
+### 9.1 Tavsiye Edilen Veri Setleri
+
+| Veri Seti | Boyut | Lisans | Uygunluk | URL |
+|-----------|-------|--------|----------|-----|
+| **felipekitamura/head-ct-hemorrhage** (şu an kullandığımız) | 200 slice (100/100) | CC0 | Baseline | kaggle.com/datasets/felipekitamura/head-ct-hemorrhage |
+| **CQ500 (Qure.ai)** | 491 scan, 193,317 slice; 205 ICH + 54 normal | CC BY-NC-SA 4.0 | En dengeli ek veri; binary için 205 ICH vs 54 normal (10:1 imbalance) | headctstudy.qure.ai/dataset |
+| **RSNA 2019 Intracranial Hemorrhage Detection** | 874,035 slice, 25,272 exam; 5 ICH alt tipi | Non-commercial (research only) | En büyük; subtype sınıflandırması için; train/test'e yetiyor | kaggle.com/c/rsna-intracranial-hemorrhage-detection |
+| **Hemorica** (2025) | 372 scan, 5 ICH alt tipi + segmentasyon mask'ları | Academic | Yüksek kaliteli etiketleme; tek hastane kaynaklı (domain shift riski) | arxiv.org/abs/2509.22993 |
+| **BHX (Brain Hemorrhage Extended)** | CQ500 üzerine bounding-box etiketleri | PhysioNet | Lokalizasyon için; sınıflandırmada ek kullanılabilir | physionet.org/content/bhx-brain-bounding-box |
+| **HemSeg-200** | 200 voxel-annotated scan | Academic | Segmentasyon odaklı ama classification için de kullanılabilir | arxiv.org/html/2405.14559 |
+
+### 9.2 Kullanım Stratejileri
+
+**A) Hiç değiştirmeden dışarıdan test (sunum için):**
+- CQ500'den ~10 slice (5 normal + 5 hemorrhage) indirin, resize edip `web_crawled_test/` klasörüne koyun.
+- `main.py --webcrawl` ile model bu "görülmemiş" veride nasıl performans veriyor kontrol edin.
+- Bu, sunumda "external validation" başlığı altında çok etkilidir; domain shift'i de göstermiş olursunuz.
+
+**B) Daha büyük veriyle re-train (proje kapsamını genişletme):**
+- CQ500'den slice-level etiketli data çıkarıp felipekitamura ile birleştirin.
+- **Dikkat**: Lisanslar farklı (CC0 vs CC BY-NC-SA) → rapora belirtin.
+- Split stratejisi: source-stratified split — her veri setinden orantılı train/val/test.
+- Normalizasyon istatistiklerini yeniden hesaplayın (farklı CT cihazları farklı dağılım).
+
+**C) Multi-dataset generalization test:**
+- `train` = felipekitamura (200), `test_external` = CQ500 subset.
+- Beklenen: accuracy düşer (domain shift). Düşüş miktarı modelin generalization gücünü gösterir.
+- Bu, sunumda "modelimiz gerçekten öğrenmiş mi, yoksa kaynak-spesifik mi?" sorusunun cevabı.
+
+### 9.3 Veri İndirme Notları
+
+- **RSNA** için Kaggle hesabı + challenge katılımı gerekiyor (veri >400GB). Küçük bir subset için AWS Open Data Registry (https://registry.opendata.aws/rsna-intracranial-hemorrhage-detection/) daha pratik.
+- **CQ500** doğrudan indirilebilir ama DICOM formatında — `pydicom` ile PNG'ye çevirmeniz gerekir.
+- **Hemorica** NIFTI formatında; `nibabel` ile okuma, slice seçimi ve PNG export.
+- **Copyright uyarısı**: Her veri seti lisansına rapor/kodda atıf verin; commercial veya non-commercial kullanım kurallarına dikkat.
+
+### 9.4 Web-Crawling için Güvenilir Kaynaklar
+
+Proje şartnamesinde "web-crawling ile birkaç görüntü örneği" istendi. Güvenilir akademik/klinik kaynaklar:
+- **Radiopaedia.org**: Her vakanın detaylı açıklaması + lisanslı görüntüler (CC BY-NC-SA).
+- **NLM Open-i**: NIH'ın açık medikal görüntü arama motoru.
+- **Radiology Assistant (Radboud)**: Eğitim amaçlı vakalar.
+- Rastgele Google görseli yerine bu kaynakları kullanın — sunumda "güvenilir akademik kaynak" kaydıyla.
+
+---
+
+## 10. IEEE XPLORE LİTERATÜR İSKELETİ (2025 Makaleler)
+
+Şartnamede "Brain hemorrhage ile ilgili 5 adet SADECE ve SADECE IEEE Xplore makale (2025)" istendi.
+
+### 10.1 Arama Stratejisi
+
+IEEE Xplore (ieeexplore.ieee.org) → Advanced Search:
+- **Arama sorguları:**
+  - `"intracranial hemorrhage" AND "deep learning" AND "CT"` → Published Year: 2025
+  - `"brain hemorrhage" AND "CNN" AND classification` → 2025
+  - `"head CT" AND "transfer learning" AND hemorrhage` → 2025
+- **Filtreler:** Year = 2025, Content Type = Conferences / Journals, Subject = Bioengineering / Medical Imaging
+
+### 10.2 Literatür Özeti Tablosu (Rapor için)
+
+Her makale için aşağıdaki tablo kolonlarını doldurun (raporda yer alacak):
+
+| Kaynak | Veri Seti | Model | Accuracy / F1 / AUC | Katkı / Sınırlılık |
+|--------|-----------|-------|---------------------|--------------------|
+| [Makale 1, 2025] | ... | ... | ... | ... |
+| [Makale 2, 2025] | ... | ... | ... | ... |
+| [Makale 3, 2025] | ... | ... | ... | ... |
+| [Makale 4, 2025] | ... | ... | ... | ... |
+| [Makale 5, 2025] | ... | ... | ... | ... |
+
+### 10.3 IEEE Referans Formatı Örneği
+
+```
+[1] A. Yazar, B. Yazar, ve C. Yazar, "Başlık," IEEE Trans. Medical Imaging,
+    vol. XX, no. Y, ss. 1234-1245, 2025, doi: 10.1109/TMI.2025.xxxxxxx.
+```
+
+### 10.4 Kendi Projenizi Literatürle Karşılaştırma
+
+Rapor tartışma bölümünde: "[1] ImageNet pretrained ResNet-50 ile X dataset'inde %95 accuracy raporlarken, bizim ConvNeXt-Tiny tabanlı yaklaşımımız 200 örneklik dengeli veri setinde %96.7 accuracy elde etmiştir; fark, [2]'de önerilen progressive unfreezing + Mixup kombinasyonunun küçük veride sağladığı regularization avantajına bağlanabilir."
+
+---
+
+## 11. HOCANIN "AYRINTIYA İNEN" SORULARI (ÖNCEDEN HAZIRLIK)
+
+Bu sorular savunmada ince teknik detaylara girmek isteyen hocaları hedefler.
+
+### 11.1 Kod/Mimari Ayrıntıları
+
+**S: `train.py`'de en fazla hangi satırı savunabilirsiniz? Neden?**
+C: Mixup accuracy hesabı düzeltmesi (lambda-weighted accuracy). Çünkü standart `(pred == target).mean()` Mixup'lı eğitimde *yanlış* sonuç verir — target batch'te biri mixup_a biri mixup_b ise hangisini doğru sayacağız? Biz her ikisini de λ/(1-λ) ağırlıklı topladık. Bu küçük fark bug olarak uzun süre gözden kaçabilir.
+
+**S: `create_dataloaders` neden Custom CNN için ayrı çağrılıyor?**
+C: Grid search Custom CNN için batch_size=8 optimal bulmuş, ConvNeXt için 16. Aynı DataLoader ile iki modeli eğitirsek ya Custom CNN suboptimal batch ile eğitilir ya da ConvNeXt. Bu yüzden `train_loader_cnn`, `val_loader_cnn` ayrı oluşturuluyor (`train.py`'de).
+
+**S: `gradcam.py::get_target_layer` nasıl çalışıyor, model-agnostic mi?**
+C: Model adına göre (`convnext`, `custom`) uygun son konvolüsyon bloğunu döner. Timm modelleri için `model.stages[-1]`, Custom CNN için `model.conv_block4`. Grad-CAM backward hook burada kaydedilir — gradient ve feature map tutulur, sonra ağırlıklı toplamla heatmap üretilir.
+
+**S: `visualizations.py::plot_training_analysis` hangi grafikleri üretiyor?**
+C: 2x2 subplot: (1) Train vs Val loss, (2) Train vs Val accuracy, (3) Gap eğrisi + overfitting uyarı renkleri, (4) LR schedule (varsa). Bu grafikle savunmada "model ezberlememiş" tezi görsel olarak ispatlanır.
+
+### 11.2 "Ya Şu Olsaydı" Soruları
+
+**S: Veri 200 değil 20 olsaydı ne yapardınız?**
+C: (1) Transfer learning olmadan mümkün değil — pretrained zorunlu, (2) K-fold CV (stratified 5-fold), (3) Çok agresif augmentation + CutMix, (4) Few-shot learning yöntemleri (Prototypical Networks), (5) Binary yerine self-supervised pretraining + linear probing.
+
+**S: Veri 20.000 olsaydı?**
+C: (1) Daha büyük model (ConvNeXt-Base), (2) Scratch eğitim mümkün hale gelir, (3) K-fold gereksiz, tek split yeterli, (4) 90/5/5 split, (5) Subtype classification (5 sınıf) denenebilir.
+
+**S: Class imbalance 9:1 olsaydı (bu projede 1:1)?**
+C: (1) **Stratified split** zorunlu, (2) **Weighted CE loss** (`weight` tensörü = 1/freq), (3) **Focal Loss** hard examples'a odaklanır, (4) **SMOTE** sentetik azınlık örnekleri, (5) **Oversampling** minority class augmentation. Metriklerde macro-F1 + per-class recall ön planda.
+
+**S: Model 3 sınıflı (Normal, Mild Hemorrhage, Severe Hemorrhage) olsaydı neyi değiştirirdiniz?**
+C: (1) `CLASS_NAMES` ve `NUM_CLASSES=3`, (2) `CrossEntropyLoss` otomatik 3 sınıfı kaldırır, (3) Confusion matrix 3x3, (4) Grad-CAM sınıf seçimi (`target_class` parametresi), (5) Accuracy yerine macro-F1 ön planda, (6) Ordinal ilişki için alternatif loss (ordinal regression) değerlendirilebilir.
+
+**S: Eğitim 2-3 gün sürecek olsa (ConvNeXt-Large + fold CV), ne yapardınız?**
+C: (1) Mixed precision training (AMP) ile %50 süre azalması, (2) Gradient accumulation ile batch'i büyütme, (3) DataLoader num_workers artırma, (4) Checkpoint her fold sonunda — preemption'a karşı, (5) Weights & Biases veya TensorBoard ile uzaktan izleme.
+
+### 11.3 Debug/Prod Soruları
+
+**S: Modeliniz bazı görüntülerde yanlış tahmin yapıyor — nasıl debug edersiniz?**
+C: (1) Yanlış tahminleri `evaluate.py`'dan filtrele (y_true != y_pred), (2) Her biri için Grad-CAM çıkar — model nereye bakıyor?, (3) Soft-probability değerleri (emin mi değil mi?), (4) Augmentation kaynaklı ise non-augmented inference dene, (5) Benzer yanlışlar arasında ortak artifakt var mı? (hastane stamp, kenar vs).
+
+**S: Modelinizi production'a nasıl taşırsınız?**
+C: (1) **Model serving**: `torch.jit.trace()` ile TorchScript export, (2) **Inference optimization**: INT8 quantization, (3) **API**: FastAPI + async endpoint, (4) **Container**: Docker + nvidia-runtime, (5) **Monitoring**: Prometheus metrics + alert (confidence dağılımı kayması = retrain sinyali), (6) **A/B test** + canary deployment.
+
+**S: Model şimdi çalışıyor ama 3 ay sonra performansı düşebilir — neden, nasıl izlenir?**
+C: **Data drift** (CT cihazı üreticisi yeni protokol yazdı) veya **concept drift** (yeni tip kanama görünümü) olabilir. İzleme: (1) Günlük confidence histogramı (belirsizlik artıyor mu?), (2) Prediction distribution shift, (3) Human-in-the-loop audit %5 örnek, (4) Shadow deployment yeni model + eskiyi karşılaştır.
+
+---
+
+## 12. SUNUM HAZIRLIK ÖZET
+
+**Slayt Akışı Önerisi (15 dk):**
+1. Problem (medikal AI, beyin kanaması acil teşhis)
+2. Veri seti (200 görüntü, dengeli, sınırlılık)
+3. Pipeline şeması (Bölüm 1)
+4. Preprocessing + Augmentation (neden bu sıra?)
+5. İki model mimari karşılaştırma (ConvNeXt vs Custom CNN)
+6. Hyperparameter tuning (grid search tablosu)
+7. Eğitim grafikleri (overfitting yok kanıtı)
+8. Test metrikleri (CM + ROC + PR)
+9. Grad-CAM görselleri (açıklanabilirlik)
+10. Ensemble iyileştirmesi
+11. Arayüz demo (canlı)
+12. Literatür karşılaştırma (5 IEEE makale)
+13. Kısıtlılıklar + gelecek çalışma
+14. Etik + medikal uyarı
+
+**İnteraktif demo ipucu:** Arayüzü sunum bilgisayarında açık tutun; hoca "şu görüntüyü dene" derse hemen gösterin. Grad-CAM canlı çıkarsa etki büyük.
+
+**Sık unutulanlar:**
+- [ ] requirements.txt güncel
+- [ ] Modeller klasörünün GitHub'a yüklenmeyeceği (>100MB limit) — Google Drive linkini raporda paylaşın
+- [ ] Akış şeması raporda yer alıyor
+- [ ] Literatür tablosu 5 makale dolu
+- [ ] Kod çalıştırılabilir (farklı makinede test et)
+- [ ] README.md varsa güncel
