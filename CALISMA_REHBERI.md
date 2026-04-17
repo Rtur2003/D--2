@@ -273,6 +273,145 @@ C: (1) Split oranını 80/10/10 veya 90/5/5 yapardım - büyük veride %5 bile y
 **S: GPU yoksa ne olur?**
 C: Projemiz CPU'da da çalışır (config.py otomatik algılar). Ancak eğitim çok yavaş olur. ConvNeXt-Tiny 28M parametre, 200 görüntüde bile CPU'da epoch başına ~30-60 saniye sürebilir. GPU ile bu 2-5 saniyeye düşer.
 
+### Augmentation Detayı (Derin Sorular)
+
+**S: Augmentation listesindeki sırayı neden bu şekilde seçtiniz? Sıra önemli mi?**
+C: Evet, sıra önemlidir. Önce **geometrik dönüşümler** (flip, affine) uygulanır çünkü bunlar görüntünün "şeklini" değiştirir; sonra **renk/yoğunluk** (brightness, contrast, CLAHE) uygulanır. Böylece renk dönüşümleri geometrik olarak dönmüş görüntüye uygulanır. Blur ve noise en sonda, çünkü önceki augmentasyonlardan sonra eklenen bozunma en gerçekçi olur. Yanlış sıra (örn. önce blur, sonra flip) semantik olarak tutarsız örnekler üretir.
+
+**S: Neden ElasticTransform kullandınız? Riskleri nelerdir?**
+C: Elastic transform medikal görüntülerde organ/doku varyasyonunu simüle etmek için yaygındır (U-Net makalesinde de öneriliyor). Küçük `alpha=50, sigma=5` değerleriyle anatomik mantık korunur. **Risk:** Agresif elastic (alpha>200) kanama şeklini bozabilir → model yanlış özellik öğrenir. Bu yüzden `p=0.2` (düşük olasılık) ve küçük alpha seçildi.
+
+**S: VerticalFlip medikal görüntü için doğru mu? Bir kafa ters durabilir mi?**
+C: Gerçek hayatta kafa ters yatmaz, yani sembolik olarak VerticalFlip yanıltıcı olabilir. Ancak CT slice'ları farklı açılardan alınabilir ve radyolog görüntüleme yazılımında görüntüyü çevirebilir. Ayrıca CNN'in **rotation invariance** (dönme değişmezliği) özelliğini artırmak için VerticalFlip faydalıdır. Yine de `p=0.3` ile düşük olasılık seçildi — bu augmentasyon her zaman uygulanmıyor, sadece modele farklı perspektif öğretiyor.
+
+**S: CLAHE parametrelerini (clip_limit=2.0, tile_grid_size=(8,8)) neden bu şekilde seçtiniz?**
+C: `clip_limit=2.0`: Çok yüksek olursa (>4) noise artar. Çok düşük olursa (<1) CLAHE'nin etkisi kaybolur. 2.0 medikal görüntülerde literatürdeki yaygın değerdir. `tile_grid_size=(8,8)`: 224x224 görüntüyü 8x8 = 64 tile'a böler, her tile 28x28 piksel. Bu boyut kanama bölgesi kadar küçük alanların lokal kontrastını iyileştirir.
+
+**S: Augmentasyon olasılıkları (p=0.5, 0.3, 0.2) nasıl seçildi?**
+C: Her epoch'ta her görüntü farklı kombinasyonla gelir. Eğer tüm augmentasyonlar p=1.0 olsa, her örnek "deforme" olur ve orijinal dağılımı kaybederiz. p=0.5 en agresif (flip) için; p=0.3 orta (CLAHE, vertical flip); p=0.2 riskli olanlar (blur, noise, elastic) için. Bu sayede her örnek bazen "temiz" bazen "artmış" olarak gelir → model hem orijinal hem varyant dağılımı öğrenir.
+
+**S: Mixup'ı neden `alpha=0.2` seçtiniz?**
+C: Mixup formülü: `x_mix = λ*x_i + (1-λ)*x_j` ve `λ ~ Beta(α, α)`. **α=0.2** ise Beta dağılımı uç değerlere (λ≈0 veya λ≈1) yakın örnekler üretir → karışım çok "hafif" olur. α=1.0 ile uniform karışım (λ≈0.5) çok agresif ve medikal sınıflandırmada sınıflar arası semantik karışım anlamsız olur (kanama yok ile var %50/%50 karışmaz). α=0.2 orijinal Mixup makalesinde (Zhang et al., 2018) görüntü sınıflandırma için önerilen değerdir.
+
+### Model Mimarisi Derin Sorular
+
+**S: Custom CNN v2'nin toplam parametre sayısı nasıl hesaplandı?**
+C: `torch.nn.Module`'ün `sum(p.numel() for p in model.parameters() if p.requires_grad)` ile. Custom CNN v2 için ≈1.3M; Kırılımı: Stem (≈1K), Multi-Scale (≈20K), 3x Residual-SE blok (≈400K+600K+200K), Classifier FC (≈50K). Detaylı rapor için `custom_cnn.py`'nin `__main__` bloğu parametre sayısını print eder.
+
+**S: ConvNeXt-Tiny neden 28M parametreli?**
+C: ConvNeXt ailesi büyüklüğe göre: Tiny (28M), Small (50M), Base (89M), Large (198M). Tiny seçildi çünkü: (1) 200 örnek için büyük model = overfitting, (2) CPU/GPU hesaplama yükü kabul edilebilir, (3) ImageNet üzerinde %82.1 top-1 accuracy ile yeterli pretrained güç var.
+
+**S: Receptive field nedir, Custom CNN'de ne kadar?**
+C: Receptive field, çıktı nöronunun giriş görüntüsünde "gördüğü" alan. Custom CNN v2: Stem(7x7) → MultiScale(5x5 dahil) → 3 conv blok (her biri 3x3). Toplam receptive field ≈ 7 + 4 + 2+4+8 ≈ 25+ piksel; ancak stride-2 pooling ile etkili receptive field tüm görüntüyü kapsar (224 piksel). ConvNeXt-Tiny'de daha büyük (sub-sampling + depthwise 7x7).
+
+**S: Neden Multi-Scale Block'ta 1x1, 3x3, 5x5 kernel'ler seçildi, 7x7 niye yok?**
+C: 1x1 (pointwise): kanallar arası bilgi; 3x3: yerel detay; 5x5: orta mesafe bağlam. 7x7 eklemek parametreyi ciddi artırır (49 > 25 > 9 > 1). Medikal CT'de kanama boyutları mm-cm arası, 5x5 (≈8 piksel spatial = birkaç mm) yeterli. Inception mimarisi de aynı kombinasyonu kullanır.
+
+**S: SE Block'taki `reduction=8` nasıl çalışır?**
+C: Kanal sayısı C ise → GAP ile C-boyutlu vektör → FC1: C/8 nöron (squeeze) → ReLU → FC2: C nöron (excitation) → Sigmoid → Orijinal feature map ile çarpılır. Reduction=8 parametre/performans optimum; reduction=16 daha küçük ama bilgi kaybı; reduction=4 daha güçlü ama parametreli. Orijinal SENet makalesinde de 16 varsayılan, biz küçük model için 8 seçtik.
+
+**S: Global Average Pooling yerine Adaptive Average Pooling'i neden kullandınız?**
+C: `nn.AdaptiveAvgPool2d(1)` input boyutundan bağımsızdır — 224x224 veya 256x256 gelsin, aynı çalışır. Klasik GAP (`nn.AvgPool2d(kernel)`) sabit kernel ister. Bu esneklik Grad-CAM'de 224'ten farklı boyutlarda da çalışmayı sağlar.
+
+### Eğitim Teknikleri Derin Sorular
+
+**S: Progressive Unfreezing'in fazlarını ve süresini neden öyle seçtiniz?**
+C: **Faz 1 (head only, LR=1e-3, ~5 epoch)**: ConvNeXt backbone'un ImageNet ağırlıkları sabit, sadece classifier yeni verilere adapte olur. Hızlı kırılma yaşanmaz. **Faz 2 (all layers, LR=1e-4, 30 epoch)**: Backbone açılır, daha küçük LR ile fine-tune. Bu ayrım **catastrophic forgetting**'i önler (backbone'un önceden öğrendiği kenar/doku bilgisini kaybetmemesi için). Howard & Ruder (ULMFiT, 2018) bu stratejiyi ilk öneren makale.
+
+**S: Mixup'ın doğruluk metriği nasıl hesaplanıyor? (karışık etiketler var)**
+C: Mixup ile `y_mixed = λ*y_a + (1-λ)*y_b` olur. Loss hesabında `loss = λ*CE(output, y_a) + (1-λ)*CE(output, y_b)`. Ancak **accuracy** için: mixed batch'te hangi etiket "doğru" sayılır? Çözüm: `acc = λ * (pred==y_a).mean() + (1-λ) * (pred==y_b).mean()`. Bu projede `train.py`'nin eğitim döngüsünde bu düzeltme yapıldı (önceki bug fix'te eklendi).
+
+**S: Cosine Annealing formülü nedir?**
+C: `η_t = η_min + 0.5*(η_max - η_min)*(1 + cos(πT_cur/T_max))`. Başlangıçta LR max, yarıda orta, sonda min (warm restart'ta sıfırlanır). **Warm Restart (SGDR)**: `T_max` dönemlerinde LR tekrar max'a atlar → yerel minimumdan kaçış. Bu projede `CosineAnnealingWarmRestarts(T_0=10, T_mult=2)`: ilk 10 epoch, sonra 20, 40...
+
+**S: Gradient Clipping formülü ve etkisi?**
+C: `if ||g||_2 > max_norm: g = g * (max_norm / ||g||_2)`. Gradient normu 1.0'ı aşarsa küçültülür. **Etki:** Patlayan gradient'i (özellikle küçük batch'te yaygın) engeller, eğitim stabilitesi sağlar. LSTM'de zorunludur, CNN'de bile modern best practice.
+
+**S: Label Smoothing formülü nedir, neden değeri 0.05-0.1?**
+C: `y_smooth = (1 - ε) * y_onehot + ε/K`. K=2 (sınıf sayısı), ε=0.1 → `[0.95, 0.05]`. **ε=0.1** ConvNeXt'te yaygın; **ε=0.05** Custom CNN'de kullanıldı (küçük veri setinde çok agresif smoothing performansı düşürebilir). ε=0 ise klasik CE; ε≥0.2 ise model çok "ürkek" olur, confident tahmin yapamaz.
+
+**S: Weight decay ve L2 regularization arasındaki fark nedir?**
+C: **L2 reg**: Loss'a `+ λ*||w||²` eklenir, gradient hesabında `∇L + 2λw` olur, Adam'da momentum'la etkileşir, yanlış ölçeklenir. **Weight decay (AdamW)**: Optimizer adımında direkt `w ← w - η*(g + λ*w)` uygulanır, momentum'dan bağımsız. AdamW'da weight decay doğru davranır. Bu yüzden `optim.AdamW(..., weight_decay=1e-4)` kullandık.
+
+**S: Grid Search vs Random Search vs Bayesian?**
+C: **Grid**: Tüm kombinasyonları dener, sistematik; pahalı (12 komb. × 20 epoch = 240 epoch). **Random**: Rastgele seçer, aynı süre içinde daha geniş arama; Bergstra-Bengio (2012) makalesinde grid'ten iyi çıktığı gösterildi. **Bayesian (Optuna/TPE)**: Önceki denemelerden öğrenerek bir sonrakini seçer; en verimli ama karmaşık kurulum. Bu proje için 12 kombinasyon yeterli → Grid tercih edildi.
+
+**S: Reproducibility (tekrarlanabilirlik) nasıl sağlanıyor?**
+C: `random_state=42` (split), `torch.manual_seed(42)`, `np.random.seed(42)`, `torch.cuda.manual_seed(42)` + CuDNN benchmark kapalı. Ancak tam deterministic için `torch.use_deterministic_algorithms(True)` da gerekir (hız trade-off). Mixup + random augmentation sebebiyle tam aynı sonuç her run'da alınamaz ama trend benzer olur.
+
+### Değerlendirme Derin Sorular
+
+**S: Confusion Matrix'te FP ve FN'nin medikal anlamı nedir, hangisi daha ciddi?**
+C: **FP (False Positive)**: Sağlıklı hastaya "kanaman var" demek → gereksiz ileri tetkik, anksiyete. **FN (False Negative)**: Kanaması olan hastaya "normal" demek → **müdahale gecikmesi, ölüm riski**. Medikal tarama modellerinde **recall (FN düşür)** genelde precision'dan (FP düşür) daha öncelikli. Bu projede her iki model de dengeli çalışıyor.
+
+**S: Accuracy formülü nedir, dengeli veri setinde bile neden yetersiz?**
+C: `Acc = (TP+TN)/(TP+TN+FP+FN)`. Dengeli veride bile tek bir sayı kaybın *nerede* olduğunu göstermez. Örneğin %90 accuracy: %10 kayıp FP mi FN mi? Bilemiyoruz → Confusion matrix + F1 + Recall gerekli.
+
+**S: Precision, Recall, F1 formülleri?**
+C: `Precision = TP/(TP+FP)`, `Recall = TP/(TP+FN)`, `F1 = 2*P*R/(P+R)`. F1 harmonik ortalama çünkü aritmetik ortalama büyük değeri öne çıkarır, harmonik küçük değere ceza verir — yani precision=1 recall=0 olsa aritmetik 0.5 ama harmonik 0 → gerçek performans.
+
+**S: AUC değeri 1.0 çıktı, bu güvenilir mi?**
+C: **Dikkatli değerlendirme gerekir.** Dengeli 30 örnek test setinde AUC=1.0 matematiksel olarak mümkün (tüm threshold'larda iki sınıf doğru sıralanmış). ConvNeXt pretrained + 200 örnek + kolay ayrışabilen sınıflar (kanama vs normal görsel olarak belirgin) → olası. Ancak küçük test seti sebebiyle **generalization'ın garantisi değil**. Bu yüzden ensemble + external test (web-crawled) önerilir. AUC=1.0 sunarken "30 örneklik test setinde" kaydıyla söyleyin.
+
+**S: ROC eğrisi ile Precision-Recall eğrisi arasındaki fark nedir?**
+C: **ROC (TPR vs FPR)**: Threshold değiştikçe nasıl performans; dengeli veride iyi gösterge. **PR (Precision vs Recall)**: Dengesiz veride daha bilgi verici çünkü FPR düşük (TN çok), PR minority class'ta kaybı yakalar. Bu proje dengeli → her ikisi benzer bilgi verir, biz ikisini de çizdik.
+
+**S: t-SNE'nin perplexity parametresini neden default bıraktınız?**
+C: t-SNE'de `perplexity ≈ sqrt(n)` iyi bir başlangıç. 200 örnek için ≈14. scikit-learn default 30, küçük veri için 10-30 arası çalışır. Çok büyük perplexity (>50) lokal yapıyı kaybeder; çok küçük (<5) gürültülü olur. Sabit bıraktık çünkü görsel ayrım yeterince belirgin.
+
+**S: Grad-CAM'i neden ConvNeXt'in son katmanından alıyorsunuz?**
+C: Grad-CAM formülü: `L^c = ReLU(Σ_k α_k^c * A^k)`, α: sınıf-spesifik kanal önem katsayısı (global avg pool of gradients). Son conv katman (Custom CNN'de `conv_block4`, ConvNeXt'te `stages[-1]`) en yüksek semantik bilgiye sahip ama yeterli spatial çözünürlüğü tutar (7x7 veya 14x14). Daha erken katman → spatial yüksek ama semantik düşük; daha geç (GAP sonrası) → spatial bilgi kaybolmuş.
+
+### Genel/Etik/Teorik Sorular
+
+**S: Neden binary classification, neden 5-sınıf ICH subtype değil?**
+C: Kaynak veri seti (felipekitamura) sadece binary etiketlere sahip. Subtype sınıflandırma için RSNA veya Hemorica gibi etiketli setler gerekli. Projenin scope'u binary ile sınırlandırıldı çünkü: (1) Veri seti imkanı, (2) 200 örnekle 5 sınıf = sınıf başına 40 örnek, öğrenme zor.
+
+**S: Modeliniz yeni bir hastaneden gelen CT'de çalışır mı? Domain shift nedir?**
+C: **Muhtemelen düşük performansla.** Domain shift: Eğitim ve test veri dağılımı farklı olması (farklı CT cihazları, protokoller, popülasyonlar). Bu proje tek kaynak veriyle eğitildi → deployment'ta **domain adaptation** (fine-tune with target domain) veya **domain generalization** (augmentation ile çeşitlilik) gerekir. Sunum için web-crawled test bu zayıflığı göstermek içindir.
+
+**S: Eğer yanlış sınıflandırırsa kim sorumlu?**
+C: Medikal AI etiği: Son karar **doktora aittir** (FDA rehberi, EU AI Act). AI "karar destek" aracıdır, "karar aracı" değildir. Bu projenin arayüzünde de "Tibbi teshis icin kullanilamaz" uyarısı var. Yasal sorumluluk geliştirici (CE mark), satan şirket ve kullanıcı doktor arasında paylaşılır.
+
+**S: Modelin kararını doktora nasıl açıklarsınız?**
+C: (1) **Olasılık skoru**: %85 hemorrhage confidence, (2) **Grad-CAM**: hangi bölgeye baktığı, (3) **Ensemble detay**: iki modelin hemfikir olup olmadığı. Doktor bu üç bilgiyi kendi muayene bulgularıyla çapraz kontrol eder.
+
+**S: Batch size 8 vs 16 vs 32 seçimi performansı nasıl etkiler?**
+C: **Küçük batch (8)**: Gradient daha gürültülü → regularizer etkisi, küçük veride iyi; daha yavaş hesap. **Büyük batch (32)**: Daha stabil gradient; fakat küçük veride her epoch'ta daha az güncelleme. Grid search Custom CNN için batch=8 optimal bulundu — 200 örnekli veri setinde "noisy gradient" aslında fayda sağlıyor.
+
+**S: Learning rate 1e-3 mü 1e-4 mü kullandığınız modele göre neden değişiyor?**
+C: **ConvNeXt**: Phase 1 (head only) 1e-3 — classifier sıfırdan, yüksek LR OK; Phase 2 (full) 1e-4 — pretrained ağırlıklara zarar vermemek için küçük. **Custom CNN**: Sıfırdan eğitim, ama grid search 1e-4'ü optimal buldu (1e-3'te loss dalgalanıyor, 1e-5'te yakınsama yavaş).
+
+**S: Neden kayıp fonksiyonu olarak CrossEntropy, Focal Loss değil?**
+C: **Focal Loss** (Lin et al., 2017) dengesiz veri (sınıf oranı 1:100+) için tasarlandı, "hard examples"a odaklanır. Bu proje 50/50 dengeli → focal gereksiz. CE + Label Smoothing zaten yeterli düzenlileştirme sağlıyor.
+
+**S: Modelinizi compress etmek (quantization, pruning) gerekseydi nasıl yapardınız?**
+C: (1) **Post-training quantization** (INT8): PyTorch `quantize_dynamic` → 4x küçük model, %1-2 accuracy kaybı. (2) **Pruning**: `torch.nn.utils.prune` ile küçük ağırlıkları sıfırla, %50 sparse → aynı accuracy mümkün. (3) **Knowledge distillation**: ConvNeXt'ten Custom CNN'e bilgi aktarımı. Şu an mobil deployment hedefi yok ama sorulursa bu cevap.
+
+**S: Overfitting gap nedir, sizin modelinizde değer kaç?**
+C: `gap = train_acc - val_acc` (her epoch için). **>%10 = overfitting**, %5-10 = hafif, <%5 = iyi. Bu projede: ConvNeXt max gap ~%21 ama son epoch %7.7 (early stopping kurtardı); Custom CNN max %10.34, son %-15.76 (val train'den iyi — Mixup'tan etkilenen train metriği). Final değerler kabul edilebilir.
+
+**S: Early stopping olmasa ne olurdu?**
+C: Train accuracy %100'e yaklaşırdı, val accuracy önce artıp sonra düşmeye başlardı (overfitting klasik örüntüsü). Model train verisini ezberlerdi, generalization kaybolurdu. Early stopping val_loss'un patience epoch boyunca iyileşmemesi durumunda eğitimi keser — **validation curve'ün minimumunu otomatik yakalar.**
+
+**S: Val vs test farkı nedir, iki ayrı set gereksiz mi?**
+C: **Val seti**: Hyperparameter seçimi, early stopping, model seçimi için kullanılır → "val'e overfit" olur (biz farkında olmadan val'e göre ayar yaparız). **Test seti**: Yalnızca *son kez* model performansını ölçmek için, ASLA karar için kullanılmaz. Bu ayrım olmadan bildirilen performans "optimistic bias" içerir. Bu projede test seti grid search'e bile girmedi.
+
+**S: 30 örneklik test seti istatistiksel olarak anlamlı mı?**
+C: **Sınırlı anlamlılık.** %95 güven aralığı geniş olur: %96.7 (29/30) accuracy için CI ≈ [%82, %99.8]. Daha güvenilir sonuç için k-fold CV veya external dataset (CQ500, RSNA) gerekir. Raporda bu kısıtlılık açıkça belirtilmeli.
+
+**S: Proje zaman trade-off'ları: daha büyük model vs daha çok augmentation?**
+C: **200 örnek** veri bottleneck'idir. Daha büyük model (ConvNeXt-Base 89M) → overfit. Daha çok augmentation (ör. stronger Mixup, CutMix) → daha iyi generalization. Yani **veri/regularization > kapasite**. Biz ConvNeXt-Tiny + Custom CNN (1.3M) + agresif regularization kombinasyonunu seçtik.
+
+**S: Ensemble'da ConvNeXt ve Custom CNN ağırlıkları nasıl bulundu?**
+C: `ensemble.py::find_optimal_weights` — validation seti üzerinde `w1 ∈ [0, 1]` arasında 0.05 adımlarla 21 ağırlık denenir, en yüksek val accuracy veren seçilir. Test seti kullanılmaz — test leakage'i önlemek için.
+
+**S: "Grad-CAM model kenar piksellere bakıyor" durumu olursa ne dersiniz?**
+C: Bu **shortcut learning** işaretidir. Model veri setindeki artifakttan öğreniyor demektir (örn. kanama görüntülerinde resim kenarında hastane damgası). Çözüm: (1) Veri temizliği — artifakt maskeleme, (2) Daha çeşitli veri, (3) Center cropping, (4) Augmentation ile kenar çeşitliliği.
+
+**S: Modelin karar sınırını sayısal olarak nasıl ayarlarsınız (threshold tuning)?**
+C: `sklearn.metrics.roc_curve`'den FPR/TPR alıp Youden's J statistic (`J = TPR - FPR`)'i maksimize eden threshold seçilir. Medikal için genelde threshold < 0.5 (recall öncelikli). Bu projede varsayılan 0.5 kullanıldı ama threshold optimizasyonu `evaluate.py`'de eklenebilir.
+
 ---
 
 ## 5. DOSYA YAPISI ve AÇIKLAMALAR
