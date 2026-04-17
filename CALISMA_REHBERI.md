@@ -36,6 +36,9 @@ Aşağıda hocanın dokümanda istediği her madde ve projede nasıl karşıland
 - **t-SNE** feature space görselleştirmesi
 - **ROC-AUC + Precision-Recall** eğrileri
 - **Mixup + Label Smoothing + Cosine Annealing + Gradient Clipping + Progressive Unfreezing** (modern eğitim teknikleri)
+- **Test-Time Augmentation (TTA)** — arayüzde 4-view (identity + h/v flip + 180°) softmax ortalaması (`app.py::_tta_forward`); +%1-3 accuracy
+- **Profesyonel Arayüz** — Gradio 6 Sidebar + 4 sekmeli sonuç paneli (Olasılık / Grad-CAM / Ensemble Detay / Rapor) + custom medikal tema + 6'lı örnek galerisi
+- **GitHub Releases Model Dağıtımı** — `download_models.py` ile tek komut (100MB+ modeller repo'yu şişirmiyor)
 
 ---
 
@@ -450,6 +453,9 @@ DÖ-2/
 ```bash
 # 1. Bağımlılıkları yükle
 pip install -r requirements.txt
+
+# 1a. (İlk kurulumda) Modelleri GitHub Releases'ten indir
+python download_models.py
 
 # 2. Tüm pipeline'ı çalıştır (augmentation + tuning + train + eval)
 python main.py
