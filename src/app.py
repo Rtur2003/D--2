@@ -372,7 +372,7 @@ def _example_paths():
 
 
 def create_interface():
-    with gr.Blocks(theme=MEDICAL_THEME, css=CUSTOM_CSS, title="Head CT Hemorrhage Classifier") as demo:
+    with gr.Blocks(title="Head CT Hemorrhage Classifier") as demo:
         gr.HTML(
             "<div class='app-header'>"
             "<h1>Head CT Hemorrhage Classifier</h1>"
@@ -479,7 +479,6 @@ def create_interface():
                                     lines=16,
                                     interactive=False,
                                     show_label=False,
-                                    show_copy_button=True,
                                 )
 
                 gr.Markdown("### Hazir Ornekler")
@@ -553,6 +552,8 @@ def launch_interface():
         server_name=server_name,
         server_port=server_port,
         share=False,
+        theme=MEDICAL_THEME,
+        css=CUSTOM_CSS,
     )
 
 
