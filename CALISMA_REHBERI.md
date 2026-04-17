@@ -2,6 +2,43 @@
 ## Head CT Hemorrhage Classification
 ### Terimler, Kararlar, Neden Kullanıldı & Hoca Soruları
 
+> **Not:** Bu rehber hem savunma sırasında soruları yanıtlamak için "cep kitabı" niteliğinde hem de kod tabanını anlamayan birine projeyi baştan sona anlatabilecek detayda yazılmıştır. Her kararın *ne* olduğu kadar *neden* olduğu da açıklanır; her açıklamanın sonunda olası soruya direkt cevap vardır.
+
+---
+
+## 0. PROJE ŞARTNAMESİ UYUM KONTROLÜ (Proje2.docx)
+
+Aşağıda hocanın dokümanda istediği her madde ve projede nasıl karşılandığı madde madde eşleştirilmiştir. Savunmada doğrudan bu tabloyu gösterebilirsiniz.
+
+| # | Şartnamede İstenen | Projede Karşılığı | Dosya / Kanıt |
+|---|-------------------|-------------------|---------------|
+| 1 | Kaggle felipekitamura head-ct-hemorrhage veri seti | 200 görüntü (100 Normal / 100 Hemorrhage) kullanıldı | `head_ct/head_ct/`, `labels.csv` |
+| 2 | Sınıflandırma problemi | Binary classification (Normal vs Hemorrhage) | `config.py::CLASS_NAMES` |
+| 3 | Veri seti hazırlama (ön işleme / preprocessing) | Resize 224x224, RGB, train'den hesaplanan mean/std ile normalizasyon | `src/data_preprocessing.py` |
+| 4 | Veri artırımı (data augmentation) | Albumentations: HorizontalFlip, VerticalFlip, Affine (translate/scale/rotate), RandomBrightnessContrast, CLAHE, GaussianBlur/MedianBlur, GaussNoise, ElasticTransform — **yalnızca train'e** | `src/data_augmentation.py` |
+| 5 | Train + Validation + Test split | Stratified 70/15/15 → 139 / 31 / 30; random_state=42 | `src/data_split.py` |
+| 5a | Sunumda kullanmak için web-crawling ile birkaç harici görüntü | `web_crawler.py` ve `--webcrawl` modu; `web_crawled_test/` klasörü | `src/web_crawler.py`, `main.py --webcrawl` |
+| 6 | 1 pretrained CNN (ConvNeXt, ResNeXt,...) | ConvNeXt-Tiny (timm), ImageNet ön-eğitimli, Progressive Unfreezing ile fine-tune | `src/pretrained_model.py`, `src/train.py` |
+| 7 | 1 özgün CNN (kendi tasarımınız) | Custom CNN v2: Stem + Multi-Scale Block + 3x Residual-SE Block + GAP + FC (≈1.3M parametre) | `src/custom_cnn.py` |
+| 8 | Hyperparameter tuning (LR, batch size, epoch, early stopping patience, vs.) | Grid Search: LR × batch_size × weight_decay (12 kombinasyon). Sonuçlar tablo ve görsel olarak raporda. | `src/hyperparameter_tuning.py`, `results/*_grid_search.png`, `results/*_best_hparams.json` |
+| 9 | Her iki CNN için train/val eğitim grafikleri | Her model için loss & accuracy eğrileri + overfitting analizi | `results/convnext_training_curves.png`, `results/custom_cnn_training_curves.png`, `results/*_training_analysis.png` |
+| 10 | Eğitilmiş modellerin saklanması | `.pth` dosyası olarak checkpoint (model_state_dict + metadata) | `models/convnext_tiny_best.pth`, `models/custom_cnn_best.pth` |
+| 11 | Overfitting trend kontrolü | Training analysis grafiği: gap eğrisi + renkli uyarı (>%10 kırmızı, >%5 turuncu) | `src/visualizations.py::plot_training_analysis` |
+| 12 | Confusion Matrix, Accuracy, Precision, Recall | 3 model için de (ConvNeXt, Custom CNN, Ensemble) ayrı ayrı rapor | `src/evaluate.py`, `results/*_confusion_matrix.png`, `results/*_metrics.json` |
+| 13 | Dosya seçimi ile tahmin eden arayüz + olasılık skoru | Gradio arayüzü: görüntü yükle → 3 model seçimi → olasılık + Grad-CAM + detay raporu | `src/app.py` |
+| 14 | IEEE Xplore makale formatında rapor | Proje raporu `docs/` klasöründe template'e göre yazılmalı (kod kapsamı dışında) | `project_template.docx` |
+| 15 | Akış şeması | Bu rehberin 1. bölümünde + rapora eklenmek üzere hazırlandı | `CALISMA_REHBERI.md::1` |
+| 16 | 5 adet IEEE Xplore 2025 makalesi (literatür özeti tablosu) | Bölüm 11'de arama stratejisi ve iskelet sunuldu, 5 makale seçilecek | `CALISMA_REHBERI.md::11` |
+| 17 | Referanslar | Rapor sonunda IEEE stiliyle; literatür tablosundaki 5 makale + ConvNeXt + Custom CNN teknikleri | Rapor |
+| 18 | Kodlar çalışır durumda + requirements.txt | `main.py` tek komutla pipeline; `requirements.txt` tüm bağımlılıkları içerir | `main.py`, `requirements.txt` |
+
+**Öne çıkan EKSTRA (şartname istemedi ama profesyonellik için eklendi):**
+- **Ensemble** (Soft Voting, validation'dan optimal ağırlık)
+- **Grad-CAM** açıklanabilirlik (hem evaluate.py'de hem arayüzde)
+- **t-SNE** feature space görselleştirmesi
+- **ROC-AUC + Precision-Recall** eğrileri
+- **Mixup + Label Smoothing + Cosine Annealing + Gradient Clipping + Progressive Unfreezing** (modern eğitim teknikleri)
+
 ---
 
 ## 1. PROJENİN AKIŞ ŞEMASI
