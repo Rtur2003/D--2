@@ -10,7 +10,8 @@
       "Bash(python src/download_web_samples.py)",
       "Bash(python main.py --webcrawl)",
       "Bash(echo \"PID: $!\")",
-      "Bash(echo \"Exit: $?\")"
+      "Bash(echo \"Exit: $?\")",
+      "Bash(netstat -ano)"
     ]
   }
 }

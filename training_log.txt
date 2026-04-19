@@ -1,0 +1,105 @@
+[CONFIG] Device: cpu
+[CONFIG] Dataset path: C:\Users\MONSTER\Desktop\D--2\head_ct\head_ct
+[CONFIG] Total images expected: 200
+======================================================================
+BM 480 DERIN OGRENME - PROJE 2
+Head CT Hemorrhage Classification
+======================================================================
+Device: cpu
+Models dir: C:\Users\MONSTER\Desktop\D--2\models
+Results dir: C:\Users\MONSTER\Desktop\D--2\results
+======================================================================
+
+[STEP 3/5] Model Egitimi...
+[DATA] Toplam: 200 görüntü
+[DATA] Sınıf dağılımı: {1: np.int64(100), 0: np.int64(100)}
+[DATA] Normal: 100, Hemorrhage: 100
+
+============================================================
+DATA SPLIT SUMMARY (Veri Bölümleme Özeti)
+============================================================
+Set            Toplam   Normal   Hemorrhage     Oran
+------------------------------------------------------------
+Train             139       69           70    69.5%
+Validation         31       16           15    15.5%
+Test               30       15           15    15.0%
+------------------------------------------------------------
+TOPLAM            200
+============================================================
+[CHECK] Train hemorrhage oranı: 50.36% (hedef: ~50.00%)
+[CHECK] Validation hemorrhage oranı: 48.39% (hedef: ~50.00%)
+[CHECK] Test hemorrhage oranı: 50.00% (hedef: ~50.00%)
+
+[PREPROCESS] Train setinden normalizasyon istatistikleri hesaplanıyor...
+[PREPROCESS] Mean: [0.4052, 0.4082, 0.4113]
+[PREPROCESS] Std:  [0.3084, 0.3090, 0.3093]
+
+[DATA] Train: 139 örnek
+[DATA] Validation: 31 örnek
+[DATA] Augmentation: Aktif
+
+======================================================================
+PROGRESSIVE TRAINING: ConvNeXt-Tiny
+======================================================================
+
+[FAZ 1] Backbone donduruldu - Sadece classifier eğitiliyor...
+[MODEL] ConvNeXt-Tiny oluşturuldu (pretrained=True)
+[MODEL] Toplam parametre: 27,821,666
+[MODEL] Eğitilebilir parametre: 3,074
+[MODEL] Backbone donduruldu - sadece classifier eğitilecek
+  Faz1 Epoch [1/5] Train: 0.6672/0.6403 | Val: 0.6084/0.6774
+  Faz1 Epoch [2/5] Train: 0.4624/0.8201 | Val: 0.5406/0.7419
+  Faz1 Epoch [3/5] Train: 0.3941/0.8777 | Val: 0.4869/0.7419
+  Faz1 Epoch [4/5] Train: 0.3610/0.9281 | Val: 0.4383/0.8065
+  Faz1 Epoch [5/5] Train: 0.3362/0.9353 | Val: 0.4351/0.8387
+
+[FAZ 2] Tüm parametreler açıldı - Fine-tuning başlıyor...
+[MODEL] Tüm parametreler açıldı: 27,821,666 eğitilebilir
+
+============================================================
+EĞİTİM BAŞLIYOR: convnext_tiny
+============================================================
+LR: 2e-05, Batch: 16, Epochs: 60, Patience: 15
+Label Smoothing: 0.1, Mixup: True, Cosine: True
+Device: cpu
+============================================================
+
+Traceback (most recent call last):
+  File "C:\Users\MONSTER\Desktop\D--2\main.py", line 148, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\MONSTER\Desktop\D--2\main.py", line 91, in main
+    run_training(augment=True)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\MONSTER\Desktop\D--2\src\train.py", line 522, in run_training
+    convnext_history = train_convnext_progressive(
+        train_loader, val_loader, DEFAULT_HPARAMS
+    )
+  File "C:\Users\MONSTER\Desktop\D--2\src\train.py", line 389, in train_convnext_progressive
+    history = train_model(
+        model, train_loader, val_loader,
+    ...<5 lines>...
+        optimizer=disc_optimizer,
+    )
+  File "C:\Users\MONSTER\Desktop\D--2\src\train.py", line 262, in train_model
+    train_loss, train_acc = train_one_epoch(
+                            ~~~~~~~~~~~~~~~^
+        model, train_loader, criterion, optimizer, DEVICE,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        use_mixup=use_mixup, mixup_alpha=0.2, max_grad_norm=1.0
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\MONSTER\Desktop\D--2\src\train.py", line 138, in train_one_epoch
+    dominant = y_a if lam >= 0.5 else y_b
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: where() received an invalid combination of arguments - got (bool, Tensor, Tensor), but expected one of:
+ * (Tensor condition)
+ * (Tensor condition, Tensor input, Tensor other, *, Tensor out = None)
+ * (Tensor condition, Number self, Tensor other)
+      didn't match because some of the arguments have invalid types: (!bool!, !Tensor!, Tensor)
+ * (Tensor condition, Tensor input, Number other)
+      didn't match because some of the arguments have invalid types: (!bool!, Tensor, !Tensor!)
+ * (Tensor condition, Number self, Number other)
+      didn't match because some of the arguments have invalid types: (!bool!, !Tensor!, !Tensor!)
+
