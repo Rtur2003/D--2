@@ -442,18 +442,25 @@ def predict(image, model_choice: str):
     image = image.convert("RGB")
     tensor = tf(image).unsqueeze(0).to(DEVICE)
 
-    if "ConvNeXt" in model_choice:
-        model = _cache["convnext"]
+    with torch.no_grad():
+        p1 = torch.softmax(_cache["convnext"](tensor), dim=1)[0].cpu().numpy()
+        p2 = torch.softmax(_cache["custom"](tensor), dim=1)[0].cpu().numpy()
+
+    if "Ensemble" in model_choice:
+        probs = 0.5 * p1 + 0.5 * p2
+        cam_name = "convnext"
+        model_label = "Ensemble"
+        cam_model = _cache["convnext"]
+    elif "ConvNeXt" in model_choice:
+        probs = p1
         cam_name = "convnext"
         model_label = "ConvNeXt-Tiny"
+        cam_model = _cache["convnext"]
     else:
-        model = _cache["custom"]
+        probs = p2
         cam_name = "custom"
         model_label = "Custom CNN"
-
-    with torch.no_grad():
-        out = model(tensor)
-        probs = torch.softmax(out, dim=1)[0].cpu().numpy()
+        cam_model = _cache["custom"]
 
     scores = {CLASS_NAMES[i]: float(probs[i]) for i in range(len(CLASS_NAMES))}
     pred = CLASS_NAMES[probs.argmax()]
@@ -462,8 +469,8 @@ def predict(image, model_choice: str):
     report_html = _build_report_html(scores, pred, conf, model_label)
 
     try:
-        layer = get_target_layer(model, cam_name)
-        gcam = GradCAM(model, layer)
+        layer = get_target_layer(cam_model, cam_name)
+        gcam = GradCAM(cam_model, layer)
         orig = np.array(image.resize((IMG_SIZE, IMG_SIZE))) / 255.0
         cam_map, _, _ = gcam.generate(tf(image).unsqueeze(0))
         overlay = overlay_cam_on_image(orig, cam_map, alpha=0.45)
