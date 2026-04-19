@@ -20,7 +20,9 @@
       "Bash(xargs -r taskkill /PID /F echo \"Temizlendi\")",
       "Bash(tee training_log.txt)",
       "Bash(python -c \"import json,os; h=json.load\\(open\\('c:/Users/MONSTER/Desktop/D--2/results/custom_cnn_history.json'\\)\\); exit\\(0 if len\\(h['train_loss']\\)>3 else 1\\)\")",
-      "Bash(tee results/train_v2.log)"
+      "Bash(tee results/train_v2.log)",
+      "Bash(python -c \"import json; d=json.load\\(open\\('C:/Users/MONSTER/Desktop/D--2/results/custom_cnn_history.json'\\)\\); print\\('Epochs trained:', len\\(d['train_loss']\\)\\); print\\('Last epoch train_loss:', round\\(d['train_loss'][-1],4\\), 'val_acc:', round\\(d['val_acc'][-1],4\\)\\); print\\('Best val_acc:', round\\(max\\(d['val_acc']\\),4\\)\\)\")",
+      "Read(//d/D--2/v2/**)"
     ]
   }
 }

@@ -25,7 +25,7 @@ from typing import Dict, Tuple, Optional
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 import matplotlib.pyplot as plt
 
 from config import (
