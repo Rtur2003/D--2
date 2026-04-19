@@ -98,19 +98,31 @@ def get_transforms(
         transform_list.extend([
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomVerticalFlip(p=0.3),
-            transforms.RandomRotation(degrees=15),
+            transforms.RandomRotation(degrees=20),
             transforms.ColorJitter(
-                brightness=0.2, contrast=0.2, saturation=0.1, hue=0.05
+                brightness=0.3, contrast=0.3, saturation=0.2, hue=0.1
             ),
             transforms.RandomAffine(
-                degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)
+                degrees=0, translate=(0.1, 0.1), scale=(0.85, 1.15)
             ),
+            transforms.RandomApply(
+                [transforms.GaussianBlur(3, sigma=(0.1, 2.0))], p=0.3
+            ),
+            transforms.RandomAutocontrast(p=0.2),
         ])
 
     transform_list.extend([
         transforms.ToTensor(),
         transforms.Normalize(mean=mean, std=std),
     ])
+
+    if is_train and augment:
+        # RandomErasing: modeli bölge bağımsız özellikler öğrenmeye zorlar
+        transform_list.append(
+            transforms.RandomErasing(
+                p=0.3, scale=(0.02, 0.25), ratio=(0.3, 3.3), value=0
+            )
+        )
 
     return transforms.Compose(transform_list)
 
