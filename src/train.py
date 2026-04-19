@@ -195,6 +195,7 @@ def train_model(
     model_name: str,
     hparams: Dict = None,
     use_mixup: bool = False,
+    mixup_alpha: float = 0.2,
     label_smoothing: float = 0.0,
     use_cosine: bool = False,
     optimizer: optim.Optimizer = None,
@@ -261,7 +262,7 @@ def train_model(
         # Train
         train_loss, train_acc = train_one_epoch(
             model, train_loader, criterion, optimizer, DEVICE,
-            use_mixup=use_mixup, mixup_alpha=0.2, max_grad_norm=1.0
+            use_mixup=use_mixup, mixup_alpha=mixup_alpha, max_grad_norm=1.0
         )
 
         # Validate
@@ -563,7 +564,8 @@ def run_training(augment: bool = True) -> None:
             model_name="custom_cnn",
             hparams=custom_hparams,
             use_mixup=True,
-            label_smoothing=0.05,   # Daha hafif smoothing (kucuk model icin)
+            mixup_alpha=0.1,        # Dusuk alpha: hafif karisim, train acc daha az bastiriliyor
+            label_smoothing=0.05,
             use_cosine=True,
         )
         plot_training_curves(
