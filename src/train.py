@@ -1,5 +1,5 @@
 # =========================================================================
-# TRAINING (Eğitim) - v2: İleri Teknikler
+# TRAINING (Eğitim)
 # =========================================================================
 # Her iki CNN modeli için eğitim pipeline'ı.
 #
@@ -17,23 +17,20 @@
 # 5. Gradient Clipping → Gradient patlamasını önler
 # =========================================================================
 
-import os
 import copy
 import json
 import numpy as np
-from pathlib import Path
 from typing import Dict, Tuple, Optional
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from config import (
     DEVICE, MODELS_DIR, RESULTS_DIR, DEFAULT_HPARAMS,
-    IMG_SIZE, RANDOM_SEED
+    RANDOM_SEED
 )
 from data_split import get_split_data
 from data_preprocessing import (
@@ -131,14 +128,15 @@ def train_one_epoch(
         images, labels = images.to(device), labels.to(device)
 
         if use_mixup and model.training:
-            mixed_images, y_a, y_b, lam = mixup_data(images, labels, mixup_alpha)
+            mixed_images, y_a, y_b, lam = mixup_data(
+                images, labels, mixup_alpha
+            )
             optimizer.zero_grad()
             outputs = model(mixed_images)
             loss = mixup_criterion(criterion, outputs, y_a, y_b, lam)
-            # Mixup'ta accuracy: orijinal label'lar ile hesapla (daha doğru)
             _, predicted = outputs.max(1)
-            correct += (lam * predicted.eq(y_a).sum().item()
-                        + (1 - lam) * predicted.eq(y_b).sum().item())
+            dominant = torch.where(lam >= 0.5, y_a, y_b)
+            correct += predicted.eq(dominant).sum().item()
         else:
             optimizer.zero_grad()
             outputs = model(images)
@@ -199,6 +197,7 @@ def train_model(
     use_mixup: bool = False,
     label_smoothing: float = 0.0,
     use_cosine: bool = False,
+    optimizer: optim.Optimizer = None,
 ) -> Dict:
     """
     Model eğitimi - ileri tekniklerle.
@@ -222,9 +221,10 @@ def train_model(
     # Label smoothing ile CrossEntropyLoss
     criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
-    optimizer = optim.AdamW(
-        model.parameters(), lr=lr, weight_decay=weight_decay
-    )
+    if optimizer is None:
+        optimizer = optim.AdamW(
+            model.parameters(), lr=lr, weight_decay=weight_decay
+        )
 
     # Cosine Annealing veya ReduceLROnPlateau
     if use_cosine:
@@ -369,10 +369,22 @@ def train_convnext_progressive(
 
     finetuning_hparams = {
         **hparams,
-        "learning_rate": 2e-5,  # Çok küçük lr - backbone'u bozmamak için
-        "epochs": 30,
-        "early_stopping_patience": 5,
+        "learning_rate": 2e-5,
+        "epochs": 60,          # 2 tam cosine cycle (10+20+30 ep)
+        "early_stopping_patience": 15,  # restart sonrasi toparlanmaya izin ver
     }
+
+    # Discriminative LR: backbone cok kucuk, head 10x buyuk
+    backbone_params = [
+        p for n, p in model.named_parameters() if "head" not in n
+    ]
+    head_params = [
+        p for n, p in model.named_parameters() if "head" in n
+    ]
+    disc_optimizer = optim.AdamW([
+        {"params": backbone_params, "lr": 2e-5},
+        {"params": head_params,     "lr": 2e-4},
+    ], weight_decay=finetuning_hparams["weight_decay"])
 
     history = train_model(
         model, train_loader, val_loader,
@@ -381,6 +393,7 @@ def train_convnext_progressive(
         use_mixup=True,
         label_smoothing=0.1,
         use_cosine=True,
+        optimizer=disc_optimizer,
     )
 
     return history
@@ -391,34 +404,72 @@ def plot_training_curves(
     model_name: str,
     save_path: Optional[str] = None
 ) -> None:
-    """Eğitim grafiklerini çiz (rapor için)."""
+    """Egitim grafiklerini ciz (rapor icin)."""
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    epochs = range(1, len(history["train_loss"]) + 1)
+    ep_list = list(range(1, len(history["train_loss"]) + 1))
 
-    # Loss grafiği
-    axes[0].plot(epochs, history["train_loss"], "b-", label="Train Loss", linewidth=2)
-    axes[0].plot(epochs, history["val_loss"], "r-", label="Validation Loss", linewidth=2)
-    axes[0].set_xlabel("Epoch", fontsize=12)
-    axes[0].set_ylabel("Loss", fontsize=12)
-    axes[0].set_title(f"{model_name} - Loss Curves", fontsize=14, fontweight="bold")
-    axes[0].legend(fontsize=11)
-    axes[0].grid(True, alpha=0.3)
+    # Cosine Annealing Warm Restart noktalarini tespit et
+    restarts = []
+    if "lr" in history and len(history["lr"]) > 1:
+        for i in range(1, len(history["lr"])):
+            if history["lr"][i] > history["lr"][i - 1] * 1.5:
+                restarts.append(i + 1)   # 1-indexed epoch
 
-    # Accuracy grafiği
-    axes[1].plot(epochs, history["train_acc"], "b-", label="Train Accuracy", linewidth=2)
-    axes[1].plot(epochs, history["val_acc"], "r-", label="Validation Accuracy", linewidth=2)
-    axes[1].set_xlabel("Epoch", fontsize=12)
-    axes[1].set_ylabel("Accuracy", fontsize=12)
-    axes[1].set_title(f"{model_name} - Accuracy Curves", fontsize=14, fontweight="bold")
-    axes[1].legend(fontsize=11)
-    axes[1].grid(True, alpha=0.3)
-    axes[1].set_ylim([0, 1.05])
+    def _annotate_restarts(ax, y_top):
+        for r in restarts:
+            ax.axvline(r, color="#94a3b8", ls=":", lw=1.2)
+            ax.text(r + 0.1, y_top * 0.92, "LR\nRestart",
+                    fontsize=7, color="#64748b", va="top")
+
+    # Loss grafigi
+    ax = axes[0]
+    ax.plot(ep_list, history["train_loss"], "b-o",
+            label="Train Loss", lw=2, ms=4)
+    ax.plot(ep_list, history["val_loss"], "r-o",
+            label="Validation Loss", lw=2, ms=4)
+    _annotate_restarts(ax, max(max(history["train_loss"]),
+                               max(history["val_loss"])))
+    ax.set_xlabel("Epoch", fontsize=12)
+    ax.set_ylabel("Loss", fontsize=12)
+    ax.set_title(f"{model_name} - Loss Curves",
+                 fontsize=14, fontweight="bold")
+    ax.legend(fontsize=11)
+    ax.grid(True, alpha=0.3)
+
+    # Accuracy grafigi
+    ax = axes[1]
+    ax.plot(ep_list, history["train_acc"], "b-o",
+            label="Train Accuracy", lw=2, ms=4)
+    ax.plot(ep_list, history["val_acc"], "r-o",
+            label="Validation Accuracy", lw=2, ms=4)
+    _annotate_restarts(ax, 1.0)
+
+    # Mixup etkisi notu (val > train cogunlukta ise)
+    val_gt = sum(v > t for v, t in
+                 zip(history["val_acc"], history["train_acc"]))
+    if val_gt > len(history["train_acc"]) * 0.6:
+        ax.text(
+            0.5, 0.03,
+            "Not: Mixup augmentasyonu egitim dogrulugunu baskiyor"
+            " — beklenen normal davranis",
+            transform=ax.transAxes, fontsize=8.5, ha="center",
+            color="#475569", style="italic",
+            bbox=dict(fc="#f1f5f9", ec="#cbd5e1", pad=3, lw=0.8),
+        )
+
+    ax.set_xlabel("Epoch", fontsize=12)
+    ax.set_ylabel("Accuracy", fontsize=12)
+    ax.set_title(f"{model_name} - Accuracy Curves",
+                 fontsize=14, fontweight="bold")
+    ax.legend(fontsize=11)
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim([0, 1.12])
 
     plt.tight_layout()
 
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"[PLOT] Eğitim grafikleri kaydedildi: {save_path}")
+        print(f"[PLOT] Egitim grafikleri kaydedildi: {save_path}")
     else:
         plt.show()
 
@@ -484,7 +535,7 @@ def run_training(augment: bool = True) -> None:
         print("=" * 70)
     else:
         print("\n" + "=" * 70)
-        print("MODEL 2: Custom CNN v2 (Residual + SE + MultiScale)")
+        print("MODEL 2: Custom CNN (Residual + SE + MultiScale)")
         print("=" * 70)
 
         custom_cnn = get_custom_cnn()
@@ -492,10 +543,10 @@ def run_training(augment: bool = True) -> None:
         custom_hparams = {
             **DEFAULT_HPARAMS,
             "learning_rate": 1e-4,  # Grid search optimal
-            "batch_size": 8,        # Grid search optimal (kucuk batch = daha iyi)
+            "batch_size": 8,        # Grid search optimal (kucuk batch)
             "weight_decay": 1e-4,   # Grid search optimal
-            "epochs": 40,
-            "early_stopping_patience": 8,
+            "epochs": 80,           # Uzun egitim → grafik net gorunsun
+            "early_stopping_patience": 20,  # Cosine restart'lara izin ver
         }
 
         # Custom CNN icin batch_size degisti, DataLoader yeniden olustur
@@ -516,7 +567,7 @@ def run_training(augment: bool = True) -> None:
             use_cosine=True,
         )
         plot_training_curves(
-            custom_history, "Custom CNN v2",
+            custom_history, "Custom CNN",
             save_path=str(RESULTS_DIR / "custom_cnn_training_curves.png")
         )
 

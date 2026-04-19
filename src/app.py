@@ -16,7 +16,6 @@ import gradio as gr
 from config import DEVICE, MODELS_DIR, CLASS_NAMES, IMG_SIZE, DATA_DIR
 from custom_cnn import get_custom_cnn
 from pretrained_model import get_convnext_model
-from ensemble import EnsembleModel
 from gradcam import GradCAM, get_target_layer, overlay_cam_on_image
 
 
@@ -26,7 +25,6 @@ _prediction_counter = {"count": 0, "last_time": None}
 MODEL_LABELS = {
     "convnext": "ConvNeXt-Tiny (Pre-trained)",
     "custom": "Custom CNN (Ozgun)",
-    "ensemble": "Ensemble (Onerilen)",
 }
 
 
@@ -158,12 +156,9 @@ def _load_models():
     custom.load_state_dict(ckpt["model_state_dict"])
     custom.eval().to(DEVICE)
 
-    ensemble = EnsembleModel(convnext, custom, weight1=0.5, weight2=0.5)
-
     _models_cache.update({
         "convnext": convnext,
         "custom": custom,
-        "ensemble": ensemble,
         "stats": stats,
         "transform": _get_transform(stats),
     })
@@ -200,39 +195,13 @@ def _confidence_banner(pred_class: str, confidence: float) -> str:
     )
 
 
-def _ensemble_html(result: dict) -> str:
-    def _row(cls: str, s1: float, s2: float, se: float) -> str:
-        return (
-            f"<tr><td style='padding:8px 12px;font-weight:500;'>{cls}</td>"
-            f"<td style='padding:8px 12px;text-align:right;font-family:JetBrains Mono,monospace;'>{s1:.3f}</td>"
-            f"<td style='padding:8px 12px;text-align:right;font-family:JetBrains Mono,monospace;'>{s2:.3f}</td>"
-            f"<td style='padding:8px 12px;text-align:right;font-family:JetBrains Mono,monospace;font-weight:600;color:#0f766e;'>{se:.3f}</td></tr>"
-        )
-
-    rows = "".join(
-        _row(cls, result["model1_scores"][cls], result["model2_scores"][cls], result["ensemble_scores"][cls])
-        for cls in CLASS_NAMES
-    )
-    return (
-        "<div style='overflow:hidden;border:1px solid #e2e8f0;border-radius:10px;'>"
-        "<table style='width:100%;border-collapse:collapse;font-size:0.9rem;'>"
-        "<thead><tr style='background:#f1f5f9;'>"
-        "<th style='padding:10px 12px;text-align:left;font-weight:600;color:#475569;'>Sinif</th>"
-        "<th style='padding:10px 12px;text-align:right;font-weight:600;color:#475569;'>ConvNeXt</th>"
-        "<th style='padding:10px 12px;text-align:right;font-weight:600;color:#475569;'>Custom CNN</th>"
-        "<th style='padding:10px 12px;text-align:right;font-weight:600;color:#0f766e;'>Ensemble</th>"
-        "</tr></thead>"
-        f"<tbody>{rows}</tbody></table></div>"
-    )
-
-
 def _status_html(text: str, kind: str = "ready") -> str:
     cls = {"ready": "status-card", "busy": "status-card busy", "error": "status-card error"}[kind]
     return f"<div class='{cls}'>{text}</div>"
 
 
 def predict(image, model_choice_label: str, use_tta: bool, show_gradcam: bool):
-    """Single-entry predict; returns (banner_html, label_dict, gradcam_img, detail_text, ensemble_html, status_html)."""
+    """Single-entry predict; returns (banner_html, label_dict, gradcam_img, detail_text, status_html)."""
     if image is None:
         empty_banner = (
             "<div style='padding:14px 18px;border-radius:10px;background:#f1f5f9;"
@@ -240,14 +209,14 @@ def predict(image, model_choice_label: str, use_tta: bool, show_gradcam: bool):
             "Gorsel yukleyin veya asagidaki orneklerden birini secin."
             "</div>"
         )
-        return empty_banner, {}, None, "", "", _status_html("Bekleniyor: gorsel yok.", "ready")
+        return empty_banner, {}, None, "", _status_html("Bekleniyor: gorsel yok.", "ready")
 
     try:
         _load_models()
     except Exception as e:
         return (
             f"<div style='padding:14px;color:#991b1b;'>Model yukleme hatasi: {e}</div>",
-            {}, None, "", "", _status_html(f"Hata: {e}", "error"),
+            {}, None, "", _status_html(f"Hata: {e}", "error"),
         )
 
     transform = _models_cache["transform"]
@@ -257,79 +226,36 @@ def predict(image, model_choice_label: str, use_tta: bool, show_gradcam: bool):
     image = image.convert("RGB")
     input_tensor = transform(image).unsqueeze(0).to(DEVICE)
 
-    model_key = {v: k for k, v in MODEL_LABELS.items()}.get(model_choice_label, "ensemble")
+    model_key = {v: k for k, v in MODEL_LABELS.items()}.get(model_choice_label, "convnext")
+    model = _models_cache[model_key]
+    model_for_cam = model
+    model_name_for_cam = model_key
 
-    ensemble_html = ""
-    if model_key == "ensemble":
-        ensemble = _models_cache["ensemble"]
-        if use_tta:
-            m1 = _tta_forward(_models_cache["convnext"], input_tensor)[0].cpu().numpy()
-            m2 = _tta_forward(_models_cache["custom"], input_tensor)[0].cpu().numpy()
-            probs = 0.5 * m1 + 0.5 * m2
-            result = {
-                "model1_scores": {CLASS_NAMES[i]: float(m1[i]) for i in range(len(CLASS_NAMES))},
-                "model2_scores": {CLASS_NAMES[i]: float(m2[i]) for i in range(len(CLASS_NAMES))},
-                "ensemble_scores": {CLASS_NAMES[i]: float(probs[i]) for i in range(len(CLASS_NAMES))},
-                "prediction": CLASS_NAMES[int(probs.argmax())],
-                "confidence": float(probs.max()),
-            }
-        else:
-            result = ensemble.predict_single(input_tensor)
-            probs = np.array([result["ensemble_scores"][c] for c in CLASS_NAMES])
-
-        scores = result["ensemble_scores"]
-        pred = result["prediction"]
-        conf = result["confidence"]
-        ensemble_html = _ensemble_html(result)
-
-        model_for_cam = _models_cache["convnext"]
-        model_name_for_cam = "convnext"
-        detail_lines = [
-            f"MODEL: Ensemble (ConvNeXt + Custom CNN, soft-voting)",
-            f"TTA: {'Acik (4-view)' if use_tta else 'Kapali'}",
-            f"Zaman: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            "",
-            f"Sonuc: {pred}  (guven: {conf:.2%})",
-            "",
-            "--- ConvNeXt-Tiny ---",
-            *[f"  {c}: {result['model1_scores'][c]:.4f}" for c in CLASS_NAMES],
-            "",
-            "--- Custom CNN ---",
-            *[f"  {c}: {result['model2_scores'][c]:.4f}" for c in CLASS_NAMES],
-            "",
-            "--- Ensemble (0.5/0.5) ---",
-            *[f"  {c}: {result['ensemble_scores'][c]:.4f}" for c in CLASS_NAMES],
-        ]
-        detail_text = "\n".join(detail_lines)
+    if use_tta:
+        probs = _tta_forward(model, input_tensor)[0].cpu().numpy()
     else:
-        model = _models_cache[model_key]
-        model_for_cam = model
-        model_name_for_cam = model_key
+        with torch.no_grad():
+            probs = torch.softmax(model(input_tensor), dim=1)[0].cpu().numpy()
 
-        if use_tta:
-            probs = _tta_forward(model, input_tensor)[0].cpu().numpy()
-        else:
-            with torch.no_grad():
-                probs = torch.softmax(model(input_tensor), dim=1)[0].cpu().numpy()
+    scores = {CLASS_NAMES[i]: float(probs[i]) for i in range(len(CLASS_NAMES))}
+    pred = CLASS_NAMES[int(probs.argmax())]
+    conf = float(probs.max())
 
-        scores = {CLASS_NAMES[i]: float(probs[i]) for i in range(len(CLASS_NAMES))}
-        pred = CLASS_NAMES[int(probs.argmax())]
-        conf = float(probs.max())
-
-        detail_lines = [
-            f"MODEL: {MODEL_LABELS[model_key]}",
-            f"TTA: {'Acik (4-view)' if use_tta else 'Kapali'}",
-            f"Zaman: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            "",
-            f"Sonuc: {pred}  (guven: {conf:.2%})",
-            "",
-            "--- Olasilik Skorlari ---",
-            *[f"  {c}: {scores[c]:.4f}" for c in CLASS_NAMES],
-        ]
-        detail_text = "\n".join(detail_lines)
+    detail_lines = [
+        f"MODEL: {MODEL_LABELS[model_key]}",
+        f"TTA: {'Acik (4-view)' if use_tta else 'Kapali'}",
+        f"Zaman: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "",
+        f"Sonuc: {pred}  (guven: {conf:.2%})",
+        "",
+        "--- Olasilik Skorlari ---",
+        *[f"  {c}: {scores[c]:.4f}" for c in CLASS_NAMES],
+    ]
+    detail_text = "\n".join(detail_lines)
 
     gradcam_image = None
     if show_gradcam:
+        grad_cam = None
         try:
             target_layer = get_target_layer(model_for_cam, model_name_for_cam)
             grad_cam = GradCAM(model_for_cam, target_layer)
@@ -340,6 +266,9 @@ def predict(image, model_choice_label: str, use_tta: bool, show_gradcam: bool):
         except Exception as e:
             gradcam_image = np.array(image.resize((IMG_SIZE, IMG_SIZE)))
             detail_text += f"\n\n[Grad-CAM uretilemedi: {e}]"
+        finally:
+            if grad_cam is not None:
+                grad_cam.remove_hooks()
 
     _prediction_counter["count"] += 1
     _prediction_counter["last_time"] = datetime.now().strftime("%H:%M:%S")
@@ -350,7 +279,7 @@ def predict(image, model_choice_label: str, use_tta: bool, show_gradcam: bool):
     )
 
     banner = _confidence_banner(pred, conf)
-    return banner, scores, gradcam_image, detail_text, ensemble_html, _status_html(status_text, "ready")
+    return banner, scores, gradcam_image, detail_text, _status_html(status_text, "ready")
 
 
 def _example_paths():
@@ -381,7 +310,6 @@ def create_interface():
             "<span class='badge'>ConvNeXt-Tiny + Custom CNN</span>"
             "<span class='badge'>Grad-CAM Explainability</span>"
             "<span class='badge'>Test-Time Augmentation</span>"
-            "<span class='badge'>Soft-Voting Ensemble</span>"
             "</div></div>"
         )
 
@@ -390,9 +318,9 @@ def create_interface():
                 gr.HTML("<div class='sidebar-section'><h4>Model Secimi</h4></div>")
                 model_choice = gr.Radio(
                     choices=list(MODEL_LABELS.values()),
-                    value=MODEL_LABELS["ensemble"],
+                    value=MODEL_LABELS["convnext"],
                     label="",
-                    info="Ensemble: iki modelin soft-voting birlesimi (en guvenilir).",
+                    info="ConvNeXt-Tiny: ImageNet on-egitimli transfer ogrenme modeli.",
                 )
 
                 gr.HTML("<div class='sidebar-section'><h4>Gelismis</h4></div>")
@@ -412,8 +340,7 @@ def create_interface():
                         "**ConvNeXt-Tiny** — ImageNet on-egitimli, 28M parametre, "
                         "Progressive Unfreezing ile fine-tune.\n\n"
                         "**Custom CNN** — Residual + SE Attention + Multi-Scale, "
-                        "~1.3M parametre, sifirdan egitim.\n\n"
-                        "**Ensemble** — her iki modelin ciktilarinin agirlikli ortalamasi."
+                        "~1.3M parametre, sifirdan egitim."
                     )
 
                 with gr.Accordion("Grad-CAM nedir?", open=False):
@@ -467,12 +394,6 @@ def create_interface():
                                     height=380,
                                     show_label=False,
                                 )
-                            with gr.Tab("Ensemble Detay"):
-                                ensemble_display = gr.HTML(
-                                    "<div style='padding:14px;color:#64748b;'>"
-                                    "Ensemble secildiginde iki modelin ayri skorlari ve "
-                                    "birlesim degerleri burada gosterilir.</div>"
-                                )
                             with gr.Tab("Detayli Rapor"):
                                 detail_output = gr.Textbox(
                                     label="",
@@ -508,12 +429,19 @@ def create_interface():
         predict_btn.click(
             fn=predict,
             inputs=[image_input, model_choice, use_tta, show_gradcam],
-            outputs=[result_banner, output_label, gradcam_output, detail_output, ensemble_display, status_display],
+            outputs=[result_banner, output_label, gradcam_output, detail_output, status_display],
         )
         clear_btn.click(
-            fn=lambda: (None, "<div style='padding:14px 18px;border-radius:10px;background:#f1f5f9;color:#64748b;text-align:center;'>Henuz analiz yapilmadi.</div>", {}, None, "", "", _status_html("Temizlendi. Hazir.", "ready")),
+            fn=lambda: (
+                None,
+                "<div style='padding:14px 18px;border-radius:10px;"
+                "background:#f1f5f9;color:#64748b;text-align:center;'>"
+                "Henuz analiz yapilmadi.</div>",
+                {}, None, "",
+                _status_html("Temizlendi. Hazir.", "ready"),
+            ),
             inputs=[],
-            outputs=[image_input, result_banner, output_label, gradcam_output, detail_output, ensemble_display, status_display],
+            outputs=[image_input, result_banner, output_label, gradcam_output, detail_output, status_display],
         )
 
     return demo

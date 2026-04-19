@@ -1,5 +1,5 @@
 # =========================================================================
-# CUSTOM CNN MODEL (Özgün CNN Ağı) - v2
+# CUSTOM CNN MODEL (Özgün CNN Ağı)
 # =========================================================================
 # İleri düzey mimari: Residual + SE Attention + Multi-Scale Feature Fusion
 #
@@ -68,10 +68,14 @@ class ResidualSEBlock(nn.Module):
     → "En kötü ihtimal identity mapping öğren" → zarar vermez
     """
 
-    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, dropout: float = 0.15):
+    def __init__(
+        self, in_ch: int, out_ch: int, stride: int = 1, dropout: float = 0.15
+    ):
         super().__init__()
 
-        self.conv1 = nn.Conv2d(in_ch, out_ch, 3, stride=stride, padding=1, bias=False)
+        self.conv1 = nn.Conv2d(
+            in_ch, out_ch, 3, stride=stride, padding=1, bias=False
+        )
         self.bn1 = nn.BatchNorm2d(out_ch)
         self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(out_ch)
@@ -91,8 +95,8 @@ class ResidualSEBlock(nn.Module):
 
         out = F.relu(self.bn1(self.conv1(x)), inplace=True)
         out = self.bn2(self.conv2(out))
+        out = self.dropout(out)  # dropout before SE: more robust attention
         out = self.se(out)
-        out = self.dropout(out)
 
         out = out + identity  # Residual connection
         out = F.relu(out, inplace=True)
@@ -142,9 +146,6 @@ class MultiScaleBlock(nn.Module):
             nn.ReLU(inplace=True)
         ) if remaining > 0 else nn.Identity()
 
-        self._out_ch = out_ch
-        self._branch_ch = branch_ch
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         b1 = self.branch1(x)
         b3 = self.branch3(x)
@@ -157,7 +158,7 @@ class MultiScaleBlock(nn.Module):
 
 class CustomCNN(nn.Module):
     """
-    Özgün CNN Mimarisi v2 - Head CT Hemorrhage Sınıflandırma
+    Özgün CNN Mimarisi - Head CT Hemorrhage Sınıflandırma
 
     ┌──────────────────────────────────────────────────────────────────┐
     │ STEM: Conv 7x7 stride=2 → BN → ReLU → MaxPool   (224 → 56)   │
@@ -218,12 +219,16 @@ class CustomCNN(nn.Module):
         """He (Kaiming) initialization - ReLU ağlar için en iyi başlangıç."""
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.kaiming_normal_(
+                    m.weight, mode="fan_out", nonlinearity="relu"
+                )
+            elif isinstance(m, (nn.BatchNorm2d, nn.LayerNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
             elif isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+                nn.init.kaiming_normal_(
+                    m.weight, mode="fan_in", nonlinearity="relu"
+                )
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
 
@@ -243,8 +248,10 @@ def get_custom_cnn(num_classes: int = NUM_CLASSES) -> CustomCNN:
     """Custom CNN modeli oluştur."""
     model = CustomCNN(num_classes=num_classes)
     total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"[MODEL] CustomCNN v2 oluşturuldu (Residual + SE + MultiScale)")
+    trainable_params = sum(
+        p.numel() for p in model.parameters() if p.requires_grad
+    )
+    print("[MODEL] CustomCNN olusturuldu (Residual + SE + MultiScale)")
     print(f"[MODEL] Toplam parametre: {total_params:,}")
     print(f"[MODEL] Eğitilebilir parametre: {trainable_params:,}")
     return model

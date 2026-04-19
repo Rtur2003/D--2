@@ -1,0 +1,91 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[CONFIG] Device: cuda
+[CONFIG] Dataset path: C:\Users\MONSTER\Desktop\D--2-1.0\head_ct\head_ct
+[CONFIG] Total images expected: 200
+[DATA] Toplam: 200 görüntü
+[DATA] Sýnýf daðýlýmý: {1: np.int64(100), 0: np.int64(100)}
+[DATA] Normal: 100, Hemorrhage: 100
+
+[CV] Stratified 5-Fold CV  ·  pool=171  ·  epochs/fold=10
+
+[CV] Fold 1/5  train=136  val=35
+[PREPROCESS] Train setinden normalizasyon istatistikleri hesaplanýyor...
+[PREPROCESS] Mean: [0.4113, 0.4135, 0.4160]
+[PREPROCESS] Std:  [0.3064, 0.3068, 0.3070]
+  [CV] convnext
+[MODEL] ConvNeXt-Tiny oluþturuldu (pretrained=True)
+[MODEL] Toplam parametre: 27,821,666
+[MODEL] Eðitilebilir parametre: 27,821,666
+    acc=0.9714  f1=0.9714  recall=0.9714
+  [CV] custom_cnn
+[MODEL] CustomCNN v2 oluþturuldu (Residual + SE + MultiScale)
+[MODEL] Toplam parametre: 1,288,994
+[MODEL] Eðitilebilir parametre: 1,288,994
+    acc=0.6857  f1=0.6857  recall=0.6857
+
+[CV] Fold 2/5  train=137  val=34
+[PREPROCESS] Train setinden normalizasyon istatistikleri hesaplanýyor...
+[PREPROCESS] Mean: [0.4105, 0.4122, 0.4142]
+[PREPROCESS] Std:  [0.3063, 0.3068, 0.3070]
+  [CV] convnext
+[MODEL] ConvNeXt-Tiny oluþturuldu (pretrained=True)
+[MODEL] Toplam parametre: 27,821,666
+[MODEL] Eðitilebilir parametre: 27,821,666
+    acc=1.0000  f1=1.0000  recall=1.0000
+  [CV] custom_cnn
+[MODEL] CustomCNN v2 oluþturuldu (Residual + SE + MultiScale)
+[MODEL] Toplam parametre: 1,288,994
+[MODEL] Eðitilebilir parametre: 1,288,994
+    acc=0.7059  f1=0.7049  recall=0.7059
+
+[CV] Fold 3/5  train=137  val=34
+[PREPROCESS] Train setinden normalizasyon istatistikleri hesaplanýyor...
+[PREPROCESS] Mean: [0.4075, 0.4096, 0.4120]
+[PREPROCESS] Std:  [0.3064, 0.3068, 0.3071]
+  [CV] convnext
+[MODEL] ConvNeXt-Tiny oluþturuldu (pretrained=True)
+[MODEL] Toplam parametre: 27,821,666
+[MODEL] Eðitilebilir parametre: 27,821,666
+    acc=1.0000  f1=1.0000  recall=1.0000
+  [CV] custom_cnn
+[MODEL] CustomCNN v2 oluþturuldu (Residual + SE + MultiScale)
+[MODEL] Toplam parametre: 1,288,994
+[MODEL] Eðitilebilir parametre: 1,288,994
+    acc=0.8235  f1=0.8229  recall=0.8235
+
+[CV] Fold 4/5  train=137  val=34
+[PREPROCESS] Train setinden normalizasyon istatistikleri hesaplanýyor...
+[PREPROCESS] Mean: [0.4103, 0.4128, 0.4155]
+[PREPROCESS] Std:  [0.3079, 0.3083, 0.3085]
+  [CV] convnext
+[MODEL] ConvNeXt-Tiny oluþturuldu (pretrained=True)
+[MODEL] Toplam parametre: 27,821,666
+[MODEL] Eðitilebilir parametre: 27,821,666
+    acc=0.9706  f1=0.9706  recall=0.9706
+  [CV] custom_cnn
+[MODEL] CustomCNN v2 oluþturuldu (Residual + SE + MultiScale)
+[MODEL] Toplam parametre: 1,288,994
+[MODEL] Eðitilebilir parametre: 1,288,994
+    acc=0.7941  f1=0.7939  recall=0.7941
+
+[CV] Fold 5/5  train=137  val=34
+[PREPROCESS] Train setinden normalizasyon istatistikleri hesaplanýyor...
+[PREPROCESS] Mean: [0.4082, 0.4105, 0.4130]
+[PREPROCESS] Std:  [0.3055, 0.3059, 0.3060]
+  [CV] convnext
+[MODEL] ConvNeXt-Tiny oluþturuldu (pretrained=True)
+[MODEL] Toplam parametre: 27,821,666
+[MODEL] Eðitilebilir parametre: 27,821,666
+    acc=1.0000  f1=1.0000  recall=1.0000
+  [CV] custom_cnn
+[MODEL] CustomCNN v2 oluþturuldu (Residual + SE + MultiScale)
+[MODEL] Toplam parametre: 1,288,994
+[MODEL] Eðitilebilir parametre: 1,288,994
+    acc=0.6471  f1=0.6458  recall=0.6471
+
+[CV] Sonuclar: C:\Users\MONSTER\Desktop\D--2-1.0\results\cv_results.json
+[CV] Grafik: C:\Users\MONSTER\Desktop\D--2-1.0\results\cv_summary.png
+
+[CV] OZET
+  ConvNeXt-Tiny: acc = 0.988 +- 0.014
+  Custom CNN  : acc = 0.731 +- 0.067

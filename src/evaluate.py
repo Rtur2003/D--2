@@ -14,7 +14,6 @@
 
 import json
 import numpy as np
-from pathlib import Path
 from typing import Dict, List
 
 import torch
@@ -28,7 +27,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from config import (
-    DEVICE, MODELS_DIR, RESULTS_DIR, CLASS_NAMES, IMG_SIZE, DEFAULT_HPARAMS
+    DEVICE, MODELS_DIR, RESULTS_DIR, CLASS_NAMES
 )
 from data_split import get_split_data
 from data_preprocessing import (
@@ -80,7 +79,9 @@ def plot_confusion_matrix(
     )
     ax.set_xlabel("Tahmin (Predicted)", fontsize=13)
     ax.set_ylabel("Gerçek (Actual)", fontsize=13)
-    ax.set_title(f"{model_name} - Confusion Matrix", fontsize=15, fontweight="bold")
+    ax.set_title(
+        f"{model_name} - Confusion Matrix", fontsize=15, fontweight="bold"
+    )
 
     plt.tight_layout()
 
@@ -133,15 +134,19 @@ def print_evaluation_report(metrics: Dict) -> None:
     print(f"\n{'='*60}")
     print(f"TEST SONUÇLARI: {metrics['model_name']}")
     print(f"{'='*60}")
-    print(f"  Accuracy:  {metrics['accuracy']:.4f} ({metrics['accuracy']*100:.2f}%)")
+    acc = metrics['accuracy']
+    print(f"  Accuracy:  {acc:.4f} ({acc*100:.2f}%)")
     print(f"  Precision: {metrics['precision_weighted']:.4f}")
     print(f"  Recall:    {metrics['recall_weighted']:.4f}")
     print(f"  F1-Score:  {metrics['f1_weighted']:.4f}")
-    print(f"\n  Sınıf Bazlı Sonuçlar:")
-    print(f"  {'Sınıf':<15} {'Precision':>10} {'Recall':>10} {'F1-Score':>10}")
-    print(f"  {'-'*45}")
+    print("\n  Sinif Bazli Sonuclar:")
+    print(f"  {'Sinif':<15} {'Precision':>10} {'Recall':>10} {'F1-Score':>10}")
+    print(f"  {'-' * 45}")
     for name, vals in metrics["per_class"].items():
-        print(f"  {name:<15} {vals['precision']:>10.4f} {vals['recall']:>10.4f} {vals['f1']:>10.4f}")
+        print(
+            f"  {name:<15} {vals['precision']:>10.4f}"
+            f" {vals['recall']:>10.4f} {vals['f1']:>10.4f}"
+        )
     print(f"{'='*60}\n")
 
 
@@ -189,20 +194,16 @@ def evaluate_model(
 
 
 def run_evaluation() -> None:
-    """Her iki model + ensemble için test değerlendirmesi + ileri görselleştirmeler."""
+    """Her iki model icin test degerlendirmesi + ileri gorsellestirmeler."""
     from visualizations import (
         FeatureExtractor, plot_tsne, plot_roc_curves,
         plot_training_analysis, plot_dataset_overview
     )
     from gradcam import visualize_gradcam_grid
-    from ensemble import EnsembleModel, compute_optimal_weights
-    from train import create_dataloaders
 
     # Data split
     train_df, val_df, test_df = get_split_data()
-    train_paths = train_df["image_path"].tolist()
     train_labels = train_df["label"].tolist()
-    val_paths = val_df["image_path"].tolist()
     val_labels = val_df["label"].tolist()
     test_paths = test_df["image_path"].tolist()
     test_labels = test_df["label"].tolist()
@@ -213,16 +214,16 @@ def run_evaluation() -> None:
         stats = json.load(f)
     mean, std = stats["mean"], stats["std"]
 
-    print(f"\n[EVAL] Test seti: {len(test_paths)} görüntü")
+    print(f"\n[EVAL] Test seti: {len(test_paths)} goruntu")
 
-    # ── Dataset Overview Grafiği ───────────────────────────────────────
+    # ── Dataset Overview ──────────────────────────────────────────────
     print("\n[EVAL] Veri seti istatistikleri...")
     plot_dataset_overview(
         train_labels, val_labels, test_labels,
         save_path=str(RESULTS_DIR / "dataset_overview.png")
     )
 
-    # ── Eğitim Dinamikleri Analizi ─────────────────────────────────────
+    # ── Egitim Dinamikleri Analizi ────────────────────────────────────
     for name in ["convnext_tiny", "custom_cnn"]:
         history_path = RESULTS_DIR / f"{name}_history.json"
         if history_path.exists():
@@ -238,12 +239,15 @@ def run_evaluation() -> None:
     test_transform = get_transforms(mean, std, is_train=False, augment=False)
 
     # ── Model 1: ConvNeXt ──────────────────────────────────────────────
-    print("\n" + "="*70)
-    print("DEĞERLENDİRME: ConvNeXt-Tiny")
-    print("="*70)
+    print("\n" + "=" * 70)
+    print("DEGERLENDIRME: ConvNeXt-Tiny")
+    print("=" * 70)
 
     convnext = get_convnext_model(pretrained=False)
-    checkpoint = torch.load(str(MODELS_DIR / "convnext_tiny_best.pth"), map_location=DEVICE, weights_only=False)
+    checkpoint = torch.load(
+        str(MODELS_DIR / "convnext_tiny_best.pth"),
+        map_location=DEVICE, weights_only=False
+    )
     convnext.load_state_dict(checkpoint["model_state_dict"])
 
     metrics1 = evaluate_model(
@@ -252,12 +256,15 @@ def run_evaluation() -> None:
     all_metrics["convnext"] = metrics1
 
     # ── Model 2: Custom CNN ────────────────────────────────────────────
-    print("\n" + "="*70)
-    print("DEĞERLENDİRME: Custom CNN")
-    print("="*70)
+    print("\n" + "=" * 70)
+    print("DEGERLENDIRME: Custom CNN")
+    print("=" * 70)
 
     custom_cnn = get_custom_cnn()
-    checkpoint = torch.load(str(MODELS_DIR / "custom_cnn_best.pth"), map_location=DEVICE, weights_only=False)
+    checkpoint = torch.load(
+        str(MODELS_DIR / "custom_cnn_best.pth"),
+        map_location=DEVICE, weights_only=False
+    )
     custom_cnn.load_state_dict(checkpoint["model_state_dict"])
 
     metrics2 = evaluate_model(
@@ -265,59 +272,38 @@ def run_evaluation() -> None:
     )
     all_metrics["custom_cnn"] = metrics2
 
-    # ── Ensemble ───────────────────────────────────────────────────────
-    print("\n" + "="*70)
-    print("DEĞERLENDİRME: Ensemble (ConvNeXt + Custom CNN)")
-    print("="*70)
-
-    # Validation üzerinden optimal ağırlık bul
-    val_loader_for_ensemble = DataLoader(
-        HeadCTDataset(val_paths, val_labels,
-                      get_transforms(mean, std, is_train=False)),
-        batch_size=16, shuffle=False, num_workers=0
+    # ── Karsilastirma Tablosu ─────────────────────────────────────────
+    print("\n" + "=" * 70)
+    print("MODEL KARSILASTIRMASI")
+    print("=" * 70)
+    print(
+        f"  {'Model':<25} {'Accuracy':>10} "
+        f"{'Precision':>10} {'Recall':>10} {'F1':>10}"
     )
-    w1, w2 = compute_optimal_weights(convnext, custom_cnn, val_loader_for_ensemble)
-    ensemble = EnsembleModel(convnext, custom_cnn, weight1=w1, weight2=w2)
-
-    test_loader = DataLoader(
-        HeadCTDataset(test_paths, test_labels,
-                      get_transforms(mean, std, is_train=False)),
-        batch_size=16, shuffle=False, num_workers=0
-    )
-    ens_preds, ens_labels, ens_probs = ensemble.predict_loader(test_loader)
-
-    ens_metrics = compute_metrics(ens_labels, ens_preds, "Ensemble")
-    print_evaluation_report(ens_metrics)
-    plot_confusion_matrix(
-        ens_labels, ens_preds, "Ensemble",
-        save_path=str(RESULTS_DIR / "ensemble_confusion_matrix.png")
-    )
-    all_metrics["ensemble"] = ens_metrics
-
-    # ── Karşılaştırma Tablosu ──────────────────────────────────────────
-    print("\n" + "="*70)
-    print("MODEL KARŞILAŞTIRMASI (3 Model)")
-    print("="*70)
-    print(f"  {'Model':<25} {'Accuracy':>10} {'Precision':>10} {'Recall':>10} {'F1':>10}")
-    print(f"  {'-'*65}")
-    for key, m in all_metrics.items():
-        print(f"  {m['model_name']:<25} {m['accuracy']:>10.4f} "
-              f"{m['precision_weighted']:>10.4f} {m['recall_weighted']:>10.4f} "
-              f"{m['f1_weighted']:>10.4f}")
-    print(f"{'='*70}")
+    print(f"  {'-' * 65}")
+    for m in all_metrics.values():
+        print(
+            f"  {m['model_name']:<25} {m['accuracy']:>10.4f} "
+            f"{m['precision_weighted']:>10.4f} "
+            f"{m['recall_weighted']:>10.4f} "
+            f"{m['f1_weighted']:>10.4f}"
+        )
+    print("=" * 70)
 
     plot_comparison(all_metrics)
 
-    # ── ROC-AUC Eğrileri ───────────────────────────────────────────────
-    print("\n[EVAL] ROC-AUC eğrileri oluşturuluyor...")
+    # ── ROC-AUC Egrileri ──────────────────────────────────────────────
+    print("\n[EVAL] ROC-AUC egrileri olusturuluyor...")
+    test_loader = DataLoader(
+        HeadCTDataset(test_paths, test_labels, test_transform),
+        batch_size=16, shuffle=False, num_workers=0
+    )
     roc_data = {}
-
-    # Her model için hemorrhage (sınıf 1) olasılığını al
-    for name, model in [("ConvNeXt-Tiny", convnext), ("Custom CNN", custom_cnn)]:
-        y_pred, y_true, y_prob = predict(model, test_loader, DEVICE)
-        roc_data[name] = (y_true, y_prob[:, 1])
-
-    roc_data["Ensemble"] = (ens_labels, ens_probs[:, 1])
+    for roc_name, roc_model in [
+        ("ConvNeXt-Tiny", convnext), ("Custom CNN", custom_cnn)
+    ]:
+        y_pred, y_true, y_prob = predict(roc_model, test_loader, DEVICE)
+        roc_data[roc_name] = (y_true, y_prob[:, 1])
 
     plot_roc_curves(
         roc_data,
@@ -326,7 +312,9 @@ def run_evaluation() -> None:
 
     # ── t-SNE Feature Visualization ────────────────────────────────────
     print("\n[EVAL] t-SNE feature visualization...")
-    for name, model in [("ConvNeXt-Tiny", convnext), ("Custom CNN", custom_cnn)]:
+    for name, model in [
+        ("ConvNeXt-Tiny", convnext), ("Custom CNN", custom_cnn)
+    ]:
         try:
             extractor = FeatureExtractor(model, name)
             features, labels = extractor.extract(test_loader)
@@ -339,8 +327,10 @@ def run_evaluation() -> None:
             print(f"[t-SNE] {name} için hata: {e}")
 
     # ── Grad-CAM ───────────────────────────────────────────────────────
-    print("\n[EVAL] Grad-CAM görselleştirmesi...")
-    for name, model in [("ConvNeXt-Tiny", convnext), ("Custom CNN", custom_cnn)]:
+    print("\n[EVAL] Grad-CAM gorsellestirmesi...")
+    for name, model in [
+        ("ConvNeXt-Tiny", convnext), ("Custom CNN", custom_cnn)
+    ]:
         try:
             safe_name = name.replace("-", "_").replace(" ", "_").lower()
             visualize_gradcam_grid(
@@ -394,10 +384,12 @@ def plot_comparison(all_metrics: Dict) -> None:
     for bars in all_bars:
         for bar in bars:
             height = bar.get_height()
-            ax.annotate(f'{height:.3f}',
-                       xy=(bar.get_x() + bar.get_width() / 2, height),
-                       xytext=(0, 3), textcoords="offset points",
-                       ha='center', va='bottom', fontsize=8)
+            ax.annotate(
+                f'{height:.3f}',
+                xy=(bar.get_x() + bar.get_width() / 2, height),
+                xytext=(0, 3), textcoords="offset points",
+                ha='center', va='bottom', fontsize=8,
+            )
 
     plt.tight_layout()
     save_path = str(RESULTS_DIR / "model_comparison.png")

@@ -20,9 +20,8 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from typing import Optional, Tuple
-from pathlib import Path
 
-from config import CLASS_NAMES, IMG_SIZE, DEVICE, RESULTS_DIR
+from config import CLASS_NAMES, IMG_SIZE, DEVICE
 
 
 class GradCAM:
@@ -43,19 +42,24 @@ class GradCAM:
         self.gradients = None
         self.activations = None
 
-        # Hook'ları kaydet
         self._register_hooks()
 
     def _register_hooks(self):
-        """Forward ve backward hook'ları kaydet."""
         def forward_hook(module, input, output):
             self.activations = output.detach()
 
         def backward_hook(module, grad_input, grad_output):
             self.gradients = grad_output[0].detach()
 
-        self.target_layer.register_forward_hook(forward_hook)
-        self.target_layer.register_full_backward_hook(backward_hook)
+        self._fwd_handle = self.target_layer.register_forward_hook(forward_hook)
+        self._bwd_handle = self.target_layer.register_full_backward_hook(
+            backward_hook
+        )
+
+    def remove_hooks(self):
+        """Hook'ları sil — her GradCAM kullanımından sonra çağrılmalı."""
+        self._fwd_handle.remove()
+        self._bwd_handle.remove()
 
     def generate(
         self,
@@ -122,10 +126,8 @@ class GradCAM:
 def get_target_layer(model, model_name: str):
     """Model tipine göre Grad-CAM için hedef katmanı bul."""
     if "convnext" in model_name.lower():
-        # ConvNeXt-Tiny: son stage'in son bloğu
         return model.stages[-1].blocks[-1]
     else:
-        # Custom CNN v2: son residual bloğun son conv katmanı
         return model.block3.conv2
 
 
@@ -167,6 +169,19 @@ def visualize_gradcam_grid(
     target_layer = get_target_layer(model, model_name)
     grad_cam = GradCAM(model, target_layer)
 
+    try:
+        _visualize_gradcam_grid_inner(
+            grad_cam, model_name, image_paths, labels,
+            transform, save_path, num_samples
+        )
+    finally:
+        grad_cam.remove_hooks()
+
+
+def _visualize_gradcam_grid_inner(
+    grad_cam, model_name, image_paths, labels,
+    transform, save_path, num_samples
+):
     # Her sınıftan eşit sayıda seç
     normal_idx = [i for i, l in enumerate(labels) if l == 0][:num_samples // 2]
     hemorrhage_idx = [i for i, l in enumerate(labels) if l == 1][:num_samples // 2]
@@ -245,55 +260,61 @@ def visualize_single_gradcam(
     target_layer = get_target_layer(model, model_name)
     grad_cam = GradCAM(model, target_layer)
 
-    original = Image.open(image_path).convert("RGB").resize((IMG_SIZE, IMG_SIZE))
-    original_np = np.array(original) / 255.0
-
-    input_tensor = transform(original).unsqueeze(0)
-
-    fig, axes = plt.subplots(1, 4, figsize=(20, 5))
-
-    # Her sınıf için CAM
-    for cls_idx in range(2):
-        cam, probs, _ = grad_cam.generate(input_tensor, target_class=cls_idx)
-        overlay = overlay_cam_on_image(original_np, cam, alpha=0.5)
-
-        axes[cls_idx + 1].imshow(overlay)
-        axes[cls_idx + 1].set_title(
-            f"Grad-CAM: {CLASS_NAMES[cls_idx]}\n(Skor: {probs[cls_idx]:.3f})",
-            fontsize=11, fontweight="bold"
+    try:
+        original = Image.open(image_path).convert("RGB").resize(
+            (IMG_SIZE, IMG_SIZE)
         )
-        axes[cls_idx + 1].axis("off")
+        original_np = np.array(original) / 255.0
+        input_tensor = transform(original).unsqueeze(0)
 
-    # Orijinal
-    axes[0].imshow(original_np)
-    axes[0].set_title("Orijinal CT", fontsize=11, fontweight="bold")
-    axes[0].axis("off")
+        fig, axes = plt.subplots(1, 4, figsize=(20, 5))
 
-    # Fark haritası
-    cam_h, probs_h, _ = grad_cam.generate(input_tensor, target_class=1)
-    cam_n, _, _ = grad_cam.generate(input_tensor, target_class=0)
-    diff = cam_h - cam_n
-    axes[3].imshow(diff, cmap="RdBu_r", vmin=-1, vmax=1)
-    axes[3].set_title(
-        "Fark (Hemorrhage - Normal)\nKırmızı=Kanama bölgesi",
-        fontsize=10, fontweight="bold"
-    )
-    axes[3].axis("off")
+        # Her iki sınıf için CAM — sonuçları sakla (gereksiz 3. pass önlenir)
+        cams = {}
+        probs_ref = None
+        for cls_idx in range(2):
+            cam, probs, _ = grad_cam.generate(
+                input_tensor, target_class=cls_idx
+            )
+            cams[cls_idx] = cam
+            if probs_ref is None:
+                probs_ref = probs
+            overlay = overlay_cam_on_image(original_np, cam, alpha=0.5)
+            axes[cls_idx + 1].imshow(overlay)
+            axes[cls_idx + 1].set_title(
+                f"Grad-CAM: {CLASS_NAMES[cls_idx]}"
+                f"\n(Skor: {probs[cls_idx]:.3f})",
+                fontsize=11, fontweight="bold"
+            )
+            axes[cls_idx + 1].axis("off")
 
-    pred_class = CLASS_NAMES[probs_h.argmax()]
-    confidence = probs_h.max()
-    fig.suptitle(
-        f"{model_name} | Tahmin: {pred_class} ({confidence:.1%})",
-        fontsize=14, fontweight="bold"
-    )
+        axes[0].imshow(original_np)
+        axes[0].set_title("Orijinal CT", fontsize=11, fontweight="bold")
+        axes[0].axis("off")
 
-    plt.tight_layout()
+        diff = cams[1] - cams[0]
+        axes[3].imshow(diff, cmap="RdBu_r", vmin=-1, vmax=1)
+        axes[3].set_title(
+            "Fark (Hemorrhage - Normal)\nKirmizi=Kanama bolgesi",
+            fontsize=10, fontweight="bold"
+        )
+        axes[3].axis("off")
 
-    if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"[GRAD-CAM] Kaydedildi: {save_path}")
+        pred_class = CLASS_NAMES[probs_ref.argmax()]
+        confidence = probs_ref.max()
+        fig.suptitle(
+            f"{model_name} | Tahmin: {pred_class} ({confidence:.1%})",
+            fontsize=14, fontweight="bold"
+        )
 
-    plt.close()
+        plt.tight_layout()
+        if save_path:
+            plt.savefig(save_path, dpi=150, bbox_inches="tight")
+            print(f"[GRAD-CAM] Kaydedildi: {save_path}")
+        plt.close()
+
+    finally:
+        grad_cam.remove_hooks()
 
     return pred_class, confidence
 

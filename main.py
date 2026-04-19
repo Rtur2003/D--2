@@ -19,11 +19,16 @@ import os
 import io
 
 # Windows cp1254 encoding sorununu coz - UTF-8 stdout
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+sys.stdout = io.TextIOWrapper(
+    sys.stdout.buffer, encoding="utf-8", errors="replace"
+)
+sys.stderr = io.TextIOWrapper(
+    sys.stderr.buffer, encoding="utf-8", errors="replace"
+)
 
 # src/ klasorunu path'e ekle
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+_src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+sys.path.insert(0, _src)
 
 from config import DEVICE, RESULTS_DIR, MODELS_DIR
 
@@ -85,7 +90,7 @@ def main():
         from train import run_training
         run_training(augment=True)
 
-    # ── Evaluation (+ Grad-CAM, t-SNE, ROC, Ensemble) ─────────────
+    # ── Evaluation (+ Grad-CAM, t-SNE, ROC) ──────────────────────
     if args.eval or args.all:
         print("\n[STEP 4/5] Test Degerlendirmesi + Gorsellestirmeler...")
         from evaluate import run_evaluation
@@ -107,10 +112,10 @@ def main():
         print("\n" + "=" * 70)
         print("PIPELINE TAMAMLANDI!")
         print("=" * 70)
-        print(f"\nCiktilar:")
+        print("\nCiktilar:")
         print(f"  Modeller     : {MODELS_DIR}/")
         print(f"  Grafikler    : {RESULTS_DIR}/")
-        print(f"\nOlusturulan grafikler:")
+        print("\nOlusturulan grafikler:")
         expected_files = [
             "augmentation_preview.png",
             "dataset_overview.png",
@@ -120,7 +125,6 @@ def main():
             "custom_cnn_training_analysis.png",
             "convnext_tiny_confusion_matrix.png",
             "custom_cnn_confusion_matrix.png",
-            "ensemble_confusion_matrix.png",
             "model_comparison.png",
             "roc_auc_curves.png",
             "convnext_tiny_tsne.png",
@@ -135,8 +139,8 @@ def main():
             status = "OK" if path.exists() else "--"
             print(f"  [{status}] {f}")
 
-        print(f"\nArayuzu baslatmak icin:")
-        print(f"  python main.py --app")
+        print("\nArayuzu baslatmak icin:")
+        print("  python main.py --app")
         print("=" * 70)
 
 

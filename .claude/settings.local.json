@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(k, d[k]\\) for k in d]\")",
+      "Bash(python3 -c ' *)",
+      "Bash(awk 'length > 79 {print NR\": \"length\" chars: \"$0}' \"c:/Users/MONSTER/Desktop/D--2/src/train.py\")",
+      "Bash(python -)",
+      "Bash(python -c ' *)",
+      "Bash(python src/extract_features.py)",
+      "Bash(python src/download_web_samples.py)",
+      "Bash(python main.py --webcrawl)"
+    ]
+  }
+}

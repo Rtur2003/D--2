@@ -256,15 +256,29 @@ def plot_training_analysis(
 
     # 3. Generalization Gap
     ax = axes[1, 0]
-    gen_gap = [t - v for t, v in zip(history["train_acc"], history["val_acc"])]
-    colors_gap = ["#ef4444" if g > 0.1 else "#f59e0b" if g > 0.05 else "#10b981"
-                  for g in gen_gap]
+    gen_gap = [
+        t - v for t, v in zip(history["train_acc"], history["val_acc"])
+    ]
+
+    def _gap_color(g):
+        if g > 0.1:
+            return "#ef4444"   # kirmizi: overfitting
+        if g > 0.05:
+            return "#f59e0b"   # turuncu: hafif
+        if g >= -0.05:
+            return "#10b981"   # yesil: normal
+        return "#3b82f6"       # mavi: val>train (Mixup etkisi)
+
+    colors_gap = [_gap_color(g) for g in gen_gap]
     ax.bar(epochs, gen_gap, color=colors_gap, alpha=0.7)
-    ax.axhline(y=0.1, color="red", linestyle="--", alpha=0.5, label="Tehlike (>10%)")
-    ax.axhline(y=0.05, color="orange", linestyle="--", alpha=0.5, label="Uyarı (>5%)")
+    ax.axhline(y=0.1, color="red", ls="--", alpha=0.5,
+               label="Tehlike (>%10)")
+    ax.axhline(y=0.05, color="orange", ls="--", alpha=0.5,
+               label="Uyari (>%5)")
+    ax.axhline(y=0.0, color="#64748b", ls="-", alpha=0.3, lw=0.8)
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Train Acc - Val Acc")
-    ax.set_title("Generalization Gap (Düşük = İyi)", fontweight="bold")
+    ax.set_title("Generalization Gap", fontweight="bold")
     ax.legend(fontsize=9)
     ax.grid(True, alpha=0.3)
 
@@ -277,18 +291,27 @@ def plot_training_analysis(
     ax.set_yscale("log")
     ax.grid(True, alpha=0.3)
 
-    # Overfitting durum analizi
-    final_gap = gen_gap[-1] if gen_gap else 0
-    max_gap = max(gen_gap) if gen_gap else 0
-    if max_gap > 0.1:
-        status = "UYARI: Overfitting belirtisi (gap > %10)"
+    # Overfitting durum analizi:
+    # Son 1/3 epoch'un ortalama gapi kullan — restart spike'lari etkisiz kilar
+    tail = gen_gap[max(0, len(gen_gap) * 2 // 3):]
+    tail_mean = sum(tail) / len(tail) if tail else 0.0
+    min_gap = min(gen_gap) if gen_gap else 0.0
+    if tail_mean > 0.1:
+        status = "UYARI: Overfitting belirtisi (son epoch gap > %10)"
         status_color = "red"
-    elif max_gap > 0.05:
-        status = "DIKKAT: Hafif overfitting egilimi (gap > %5)"
+    elif tail_mean > 0.05:
+        status = "DIKKAT: Hafif overfitting egilimi (son gap > %5)"
         status_color = "orange"
+    elif min_gap < -0.05:
+        status = (
+            "BASARILI: Mixup/Regularization etkisi"
+            " — val>train beklenen davranis"
+        )
+        status_color = "#0f766e"
     else:
         status = "BASARILI: Iyi genelleme (gap < %5)"
         status_color = "green"
+    max_pos_gap = max((g for g in gen_gap if g > 0), default=0.0)
 
     fig.suptitle(
         f"Egitim Dinamikleri Analizi - {model_name}\n{status}",
@@ -301,8 +324,11 @@ def plot_training_analysis(
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
         print(f"[ANALYSIS] Kaydedildi: {save_path}")
         print(f"[ANALYSIS] Durum: {status}")
-        print(f"[ANALYSIS] Max generalization gap: {max_gap:.4f}, "
-              f"Final gap: {final_gap:.4f}")
+        final_gap = gen_gap[-1] if gen_gap else 0.0
+        print(
+            f"[ANALYSIS] Max pos gap: {max_pos_gap:.4f}, "
+            f"Min gap: {min_gap:.4f}, Final: {final_gap:.4f}"
+        )
 
     plt.close()
 
