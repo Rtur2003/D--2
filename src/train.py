@@ -677,9 +677,9 @@ def run_training_v2(data_dir: str = None, augment: bool = True) -> None:
 
     train_ds = HeadCTDataset(train_paths, train_labels, train_tf)
     val_ds   = HeadCTDataset(val_paths,   val_labels,   val_tf)
-    train_loader = DataLoader(train_ds, batch_size=16, sampler=sampler,
+    train_loader = DataLoader(train_ds, batch_size=32, sampler=sampler,
                               num_workers=0, pin_memory=False)
-    val_loader   = DataLoader(val_ds,   batch_size=16, shuffle=False,
+    val_loader   = DataLoader(val_ds,   batch_size=32, shuffle=False,
                               num_workers=0)
 
     print(f"[V2] Train loader: {len(train_ds)} örnek (balanced sampler)")
@@ -696,10 +696,10 @@ def run_training_v2(data_dir: str = None, augment: bool = True) -> None:
     cnn_hparams = {
         **DEFAULT_HPARAMS,
         "learning_rate": 1e-4,
-        "batch_size": 16,
+        "batch_size": 32,
         "weight_decay": 1e-4,
-        "epochs": 50,
-        "early_stopping_patience": 10,
+        "epochs": 25,
+        "early_stopping_patience": 7,
     }
     cnn_hist = train_model(
         cnn, train_loader, val_loader,
@@ -715,25 +715,8 @@ def run_training_v2(data_dir: str = None, augment: bool = True) -> None:
         save_path=str(RESULTS_DIR / "custom_cnn_training_curves.png")
     )
 
-    # ── 7. ConvNeXt ───────────────────────────────────────────────────
-    print("\n" + "=" * 70)
-    print("MODEL: ConvNeXt-Tiny — Büyük Veri Seti Eğitimi")
-    print("=" * 70)
-
-    (MODELS_DIR / "convnext_tiny_best.pth").unlink(missing_ok=True)
-
-    cnxt_loader_train = DataLoader(
-        HeadCTDataset(train_paths, train_labels, train_tf),
-        batch_size=16, sampler=WeightedRandomSampler(w, len(w)),
-        num_workers=0,
-    )
-    convnext_history = train_convnext_progressive(
-        cnxt_loader_train, val_loader, DEFAULT_HPARAMS
-    )
-    plot_training_curves(
-        convnext_history, "ConvNeXt-Tiny",
-        save_path=str(RESULTS_DIR / "convnext_training_curves.png")
-    )
+    # ConvNeXt CPU'da çok yavaş — Colab GPU'da eğit, burada atla
+    print("\n[V2] ConvNeXt CPU'da atlandı — Colab GPU ile egit.")
 
     print("\n" + "=" * 70)
     print("V2 EĞİTİMİ TAMAMLANDI!")
