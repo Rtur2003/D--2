@@ -368,11 +368,15 @@ DÖ-2/
 ├── external_test/             ← OOD harici test (9N + 12H, farklı kaynak)
 │   ├── normal/
 │   └── hemorrhage/
+├── test_image.py              ← Tek görüntü / klasör testi (4 model, renkli çıktı)
 ├── models/                    ← Kaydedilen modeller (.pth)
 │   ├── convnext_tiny_best.pth
-│   ├── custom_cnn_best.pth
+│   ├── custom_cnn_best.azveri.pth   ← Custom CNN — 200 görüntü ile eğitildi
+│   ├── custom_cnn_best.cok.veri.pth ← Custom CNN — büyük veri seti ile eğitildi
 │   └── train_stats.json       ← Normalizasyon mean/std
-└── results/                   ← Tüm grafikler
+└── results/                   ← Tüm grafikler + özellik dosyaları
+    ├── features_convnext.csv  ← ConvNeXt özellik vektörleri (200×768)
+    └── features_custom_cnn.csv← Custom CNN özellik vektörleri (200×256)
 ```
 
 ---
@@ -398,7 +402,20 @@ python main.py --app
 
 # Augmentation önizleme
 python main.py --augpreview
+
+# Tek görüntü veya klasör testi — 4 model, renkli terminal çıktısı
+python test_image.py goruntu.jpg
+python test_image.py external_test/
+python test_image.py                  # interaktif yol girişi
 ```
+
+**Test sonuçları (external_test — 21 OOD görüntü):**
+| Model | Accuracy | Normal Recall | Hemorrhage Recall |
+|---|---|---|---|
+| Ensemble | %95.2 | %100 | %91.7 |
+| ConvNeXt | %90.5 | %100 | %83.3 |
+| Custom CNN Çok Veri | %81.0 | %88.9 | %75.0 |
+| Custom CNN Az Veri | %76.2 | %100 | %58.3 |
 
 **Eğitim süresi (CPU):**
 - ConvNeXt: ~15-30 dak (65 epoch, batch=16)
