@@ -19,7 +19,8 @@
       "Bash(awk '{print $5}')",
       "Bash(xargs -r taskkill /PID /F echo \"Temizlendi\")",
       "Bash(tee training_log.txt)",
-      "Bash(python -c \"import json,os; h=json.load\\(open\\('c:/Users/MONSTER/Desktop/D--2/results/custom_cnn_history.json'\\)\\); exit\\(0 if len\\(h['train_loss']\\)>3 else 1\\)\")"
+      "Bash(python -c \"import json,os; h=json.load\\(open\\('c:/Users/MONSTER/Desktop/D--2/results/custom_cnn_history.json'\\)\\); exit\\(0 if len\\(h['train_loss']\\)>3 else 1\\)\")",
+      "Bash(tee results/train_v2.log)"
     ]
   }
 }
