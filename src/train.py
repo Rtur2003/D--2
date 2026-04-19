@@ -576,11 +576,11 @@ def run_training(augment: bool = True) -> None:
 
         custom_hparams = {
             **DEFAULT_HPARAMS,
-            "learning_rate": 1e-4,  # Grid search optimal
-            "batch_size": 8,        # Grid search optimal (kucuk batch)
-            "weight_decay": 1e-4,   # Grid search optimal
-            "epochs": 80,           # Uzun egitim → grafik net gorunsun
-            "early_stopping_patience": 20,  # Cosine restart'lara izin ver
+            "learning_rate": 3e-4,
+            "batch_size": 8,
+            "weight_decay": 5e-4,   # Daha güçlü L2 — dağılım kaymasına karşı
+            "epochs": 100,
+            "early_stopping_patience": 25,
         }
 
         # Custom CNN icin batch_size degisti, DataLoader yeniden olustur
