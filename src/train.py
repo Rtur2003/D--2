@@ -597,8 +597,8 @@ def run_training(augment: bool = True) -> None:
             model_name="custom_cnn",
             hparams=custom_hparams,
             use_mixup=True,
-            mixup_alpha=0.1,        # Dusuk alpha: hafif karisim, train acc daha az bastiriliyor
-            label_smoothing=0.05,
+            mixup_alpha=0.3,        # CutMix+Mixup karışımı için yeterli alpha
+            label_smoothing=0.1,
             use_cosine=True,
         )
         plot_training_curves(
