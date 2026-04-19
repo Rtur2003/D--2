@@ -261,10 +261,17 @@ def run_evaluation() -> None:
     print("=" * 70)
 
     custom_cnn = get_custom_cnn()
-    checkpoint = torch.load(
-        str(MODELS_DIR / "custom_cnn_best.pth"),
-        map_location=DEVICE, weights_only=False
+    _cnn_path = next(
+        (p for p in [
+            MODELS_DIR / "custom_cnn_best.azveri.pth",
+            MODELS_DIR / "custom_cnn_best.pth",
+            MODELS_DIR / "custom_cnn_best.cok.veri.pth",
+        ] if p.exists()),
+        None
     )
+    if _cnn_path is None:
+        raise FileNotFoundError("Custom CNN checkpoint bulunamadi (models/ klasorune bakin)")
+    checkpoint = torch.load(str(_cnn_path), map_location=DEVICE, weights_only=False)
     custom_cnn.load_state_dict(checkpoint["model_state_dict"])
 
     metrics2 = evaluate_model(
