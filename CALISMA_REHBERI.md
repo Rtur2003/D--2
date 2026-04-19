@@ -23,7 +23,7 @@
 | 13 | Tahmin arayüzü | Gradio: görüntü yükle → tahmin + olasılık + Grad-CAM | `src/app.py` |
 | 14 | IEEE rapor | Proje raporu | — |
 | 15 | Akış şeması | Bölüm 1 | Bu dosya |
-| 16 | 5× IEEE 2025 makale | Bölüm 10 | Bu dosya |
+| 16 | 5× IEEE 2025 makale | Bölüm 9 | Bu dosya |
 
 **Şartname ötesi ekstralar (profesyonellik):**
 Ensemble · Grad-CAM · t-SNE · ROC-AUC + PR eğrileri · Mixup+CutMix · CBAM · DropPath · RandomErasing · External OOD testi
@@ -261,7 +261,7 @@ C: Transfer learning + 200 örnek dengeli + güçlü pretrained özellikler. Öz
 ### Custom CNN v2 Soruları
 
 **S: Custom CNN'de en önemli bileşen ne?**
-C: CBAM + Residual. Residual connection olmasa 5 blok derinliğinde gradient vanishing olurdu — model öğrenemezdi. CBAM olmasa model "nereye bakacağını" bilmez — CT'de kanama küçük bir bölgede, attention olmadan tüm görüntüye eşit bakılır. Bu ikisi birlikte "hem sıgradyan hem lokalizasyon" sağlar.
+C: CBAM + Residual. Residual connection olmasa 5 blok derinliğinde gradient vanishing olurdu — model öğrenemezdi. CBAM olmasa model "nereye bakacağını" bilmez — CT'de kanama küçük bir bölgede, attention olmadan tüm görüntüye eşit bakılır. Bu ikisi birlikte "hem gradyan akışı hem lokalizasyon" sağlar.
 
 **S: CBAM nedir, SE Block'tan farkı?**
 C: SE Block (Squeeze-and-Excitation): Sadece kanal attention. GAP → FC → Sigmoid → her kanalı ölçekle. "Hangi özellik türü önemli?" sorusunu cevaplar. CBAM (Woo et al. 2018): İki aşama. (1) Channel Attention: avg+max pool → shared FC → sigmoid. (2) Spatial Attention: kanal boyunca avg+max → 7×7 conv → sigmoid → "nerede". SE sadece "ne", CBAM hem "ne" hem "nerede". CT'de kanamanın lokalizasyonu kritik → CBAM daha uygun.
@@ -286,7 +286,7 @@ C: Custom CNN sıfırdan öğreniyor. Erken epoch'larda öğrenme yavaş. Cosine
 ### Eğitim Teknikleri Soruları
 
 **S: Mixup formülü ve etiket hesabı nasıl?**
-C: `x_mix = λ*x_a + (1-λ)*x_b`, `λ ~ Beta(α, α)`. Etiket: `loss = λ*CE(out, y_a) + (1-λ)*CE(out, y_b)`. α=0.3 seçildi: Beta(0.3,0.3) → uç değerlere yakın λ üretir → karışım çok hafif (orijinal görüntüye yakın). α=1.0 = uniform karışım = görüntüler eşit ağırlıklı karışır; CT için anlamsız (kanama %50 + normal %50 karışmı tıbbi anlam taşımaz).
+C: `x_mix = λ*x_a + (1-λ)*x_b`, `λ ~ Beta(α, α)`. Etiket: `loss = λ*CE(out, y_a) + (1-λ)*CE(out, y_b)`. α=0.3 seçildi: Beta(0.3,0.3) → uç değerlere yakın λ üretir → karışım çok hafif (orijinal görüntüye yakın). α=1.0 = uniform karışım = görüntüler eşit ağırlıklı karışır; CT için anlamsız (kanama %50 + normal %50 karışımı tıbbi anlam taşımaz).
 
 **S: CutMix Mixup'tan neden iyi?**
 C: Mixup'ta her piksel iki görüntünün karışımı → "hayalet" görüntü oluşur, doğal görünmez. CutMix (Yun et al. 2019): `x_a`'dan bir dikdörtgen keser, yerine `x_b`'nin aynı bölgesini yapıştırır. Görüntü doğal kalır, sadece bir bölge değişmiş. Etiket alan oranına göre dağıtılır: `y = area_ratio*y_b + (1-area_ratio)*y_a`. Spatial feature öğrenmeyi zorlar: model bölgeye bakmalı, tüm görüntüye değil.
@@ -343,7 +343,7 @@ C: (1) Post-training quantization (INT8): `torch.quantize_dynamic` → 4× küç
 ## 5. DOSYA YAPISI
 
 ```
-DÖ-2/
+D--2/
 ├── main.py                    ← Pipeline başlangıcı (--train / --eval / --app)
 ├── requirements.txt           ← Bağımlılıklar
 ├── CALISMA_REHBERI.md         ← Bu dosya
@@ -358,7 +358,7 @@ DÖ-2/
 │   ├── train.py               ← Eğitim döngüsü, Mixup+CutMix, plot_curves
 │   ├── evaluate.py            ← Test metrikleri, Grad-CAM, t-SNE, ROC
 │   ├── hyperparameter_tuning.py ← Grid Search
-│   ├── ensemble.py            ← Soft Voting, optimal ağırlık arama
+│   ├── web_crawler.py         ← Web-crawled görüntüler ile test
 │   ├── gradcam.py             ← Grad-CAM ısı haritası
 │   ├── visualizations.py      ← t-SNE, ROC-AUC, training analysis
 │   └── app.py                 ← Gradio arayüzü
@@ -387,7 +387,7 @@ DÖ-2/
 # Bağımlılıkları yükle
 pip install -r requirements.txt
 
-# Tüm pipeline (augpreview + tune + train + eval)
+# Tüm pipeline (augpreview + tune + train + eval + webcrawl)
 python main.py
 
 # Sadece model eğitimi
@@ -403,7 +403,10 @@ python main.py --app
 # Augmentation önizleme
 python main.py --augpreview
 
-# Tek görüntü veya klasör testi — 4 model, renkli terminal çıktısı
+# Web-crawled görüntülerde test
+python main.py --webcrawl
+
+# Tek görüntü veya klasör testi — 3 model + ensemble, renkli terminal çıktısı
 python test_image.py goruntu.jpg
 python test_image.py external_test/
 python test_image.py                  # interaktif yol girişi
@@ -435,7 +438,6 @@ python test_image.py                  # interaktif yol girişi
 | `custom_cnn_training_analysis.png` | Overfitting | Gap + LR schedule |
 | `convnext_tiny_confusion_matrix.png` | Sonuçlar | ConvNeXt CM |
 | `custom_cnn_confusion_matrix.png` | Sonuçlar | Custom CNN CM |
-| `ensemble_confusion_matrix.png` | Sonuçlar | Ensemble CM |
 | `model_comparison.png` | Sonuçlar | 3 model yan yana |
 | `roc_auc_curves.png` | Sonuçlar | ROC + PR eğrileri |
 | `convnext_tiny_tsne.png` | Analiz | ConvNeXt feature space |
