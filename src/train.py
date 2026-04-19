@@ -135,7 +135,7 @@ def train_one_epoch(
             outputs = model(mixed_images)
             loss = mixup_criterion(criterion, outputs, y_a, y_b, lam)
             _, predicted = outputs.max(1)
-            dominant = torch.where(lam >= 0.5, y_a, y_b)
+            dominant = y_a if lam >= 0.5 else y_b
             correct += predicted.eq(dominant).sum().item()
         else:
             optimizer.zero_grad()
