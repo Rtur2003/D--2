@@ -28,7 +28,10 @@
       "Bash(taskkill /PID 18136 /F)",
       "Bash(python main.py --train-v2)",
       "Bash(taskkill /F /PID 12020 /PID 4340 /PID 17512 /PID 8476)",
-      "Bash(taskkill /F /PID 8476 /PID 17512)"
+      "Bash(taskkill /F /PID 8476 /PID 17512)",
+      "Bash(xargs -I{} taskkill /F /PID {})",
+      "Bash(taskkill /F /PID 8476)",
+      "Bash(taskkill /F /PID 17512)"
     ]
   }
 }
