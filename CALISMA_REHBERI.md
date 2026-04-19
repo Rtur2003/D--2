@@ -10,9 +10,9 @@ Bu dosya, projeyi **hatasız ve adım adım** çalıştırabilmeniz için hazır
 - **Problem tipi:** İkili sınıflandırma (Binary Classification)
 - **Sınıflar:** `Normal` ve `Hemorrhage`
 - **Veri kaynağı (repo içi):**
-  - Görüntüler: `/home/runner/work/D--2/D--2/head_ct/head_ct`
-  - Etiketler: `/home/runner/work/D--2/D--2/labels.csv`
-- **Ana giriş dosyası:** `/home/runner/work/D--2/D--2/main.py`
+  - Görüntüler: `./head_ct/head_ct`
+  - Etiketler: `./labels.csv`
+- **Ana giriş dosyası:** `./main.py`
 - **Model yaklaşımı:**
   - Pretrained model: ConvNeXt-Tiny (`src/pretrained_model.py`)
   - Özgün model: Custom CNN (`src/custom_cnn.py`)
@@ -22,13 +22,13 @@ Bu dosya, projeyi **hatasız ve adım adım** çalıştırabilmeniz için hazır
 ## 2) Repo Yapısı (Doğrulanmış)
 
 ```text
-/home/runner/work/D--2/D--2
+<project-root>
 ├── main.py
 ├── test_image.py
 ├── requirements.txt
 ├── labels.csv
 ├── CALISMA_REHBERI.md
-├── download_models.py
+├── download_models.py               # Release'ten model checkpoint indirme
 ├── head_ct/head_ct/                 # 200 görüntü
 ├── external_test/
 │   ├── normal/
@@ -97,11 +97,17 @@ Bu dosya, projeyi **hatasız ve adım adım** çalıştırabilmeniz için hazır
 Proje Python bağımlılıklarını `requirements.txt` üzerinden bekler:
 
 ```bash
-cd /home/runner/work/D--2/D--2
+cd <project-root>
 pip install -r requirements.txt
 ```
 
 > Not: `torch`, `torchvision`, `timm`, `gradio` gibi paketler zorunludur.
+>
+> `models/` klasöründe checkpoint yoksa önce aşağıdaki komutu çalıştırabilirsiniz:
+> `python download_models.py`
+>
+> Bu script, GitHub Release varlıklarından hazır `.pth` checkpoint dosyalarını indirir.
+> Ödevde kendi eğitiminizi göstermek istiyorsanız `--train` ile üretim yapın; sadece demo/çalıştırma için hazır checkpoint indirilebilir.
 
 ---
 
@@ -110,7 +116,7 @@ pip install -r requirements.txt
 `main.py` içindeki komutlar:
 
 ```bash
-cd /home/runner/work/D--2/D--2
+cd <project-root>
 
 # Tüm akış (varsayılan): augpreview + tune + train + eval + webcrawl
 python main.py
@@ -151,7 +157,7 @@ python main.py --app
 
 ## 7) Beklenen Çıktılar
 
-Çıktı klasörü: `/home/runner/work/D--2/D--2/results`
+Çıktı klasörü: `./results`
 
 Sık kullanılan dosyalar:
 - `convnext_tiny_metrics.json`
@@ -165,7 +171,7 @@ Sık kullanılan dosyalar:
 - `convnext_tiny_tsne.png`
 - `custom_cnn_tsne.png`
 
-Model/istatistik klasörü: `/home/runner/work/D--2/D--2/models`
+Model/istatistik klasörü: `./models`
 - `train_stats.json`
 - Eğitim sonrası `.pth` checkpoint dosyaları
 
@@ -174,17 +180,18 @@ Model/istatistik klasörü: `/home/runner/work/D--2/D--2/models`
 ## 8) Tek Görüntü veya Klasör Testi
 
 ```bash
-cd /home/runner/work/D--2/D--2
+cd <project-root>
 
-# tek dosya
-python test_image.py /tam/yol/goruntu.png
+# tek dosya (repo içinden göreli yol)
+python test_image.py ./external_test/normal/indir.jpg
 
-# klasör
-python test_image.py /tam/yol/klasor
+# klasör (repo içinden göreli yol)
+python test_image.py ./external_test
 ```
 
 `test_image.py`, model checkpoint dosyalarını `models/` altında arar.
 Checkpoint yoksa model yükleme adımı başarısız olur.
+Bu durumda `python download_models.py` ile hazır checkpoint indirilebilir veya `python main.py --train` ile modeller yeniden eğitilebilir.
 
 ---
 
@@ -200,7 +207,7 @@ Checkpoint yoksa model yükleme adımı başarısız olur.
 
 ---
 
-## 10) Sık Hata ve Çözüm
+## 10) Sık Hatalar ve Çözümler
 
 1. **`ModuleNotFoundError: torch`**
    - `pip install -r requirements.txt` çalıştırılmalı
@@ -213,8 +220,8 @@ Checkpoint yoksa model yükleme adımı başarısız olur.
    - `models/train_stats.json` ve ilgili model dosyaları mevcut olmalı
 
 4. **Veri yolu hataları**
-   - Repo içinde çalıştığından emin ol:
-     `/home/runner/work/D--2/D--2`
+   - Repo kökünde çalıştığından emin ol:
+     `<project-root>`
 
 ---
 
