@@ -1,0 +1,83 @@
+[CONFIG] Device: cpu
+[CONFIG] Dataset path: C:\Users\MONSTER\Desktop\D--2\head_ct\head_ct
+[CONFIG] Total images expected: 200
+======================================================================
+BM 480 DERIN OGRENME - PROJE 2
+Head CT Hemorrhage Classification
+======================================================================
+Device: cpu
+Models dir: C:\Users\MONSTER\Desktop\D--2\models
+Results dir: C:\Users\MONSTER\Desktop\D--2\results
+======================================================================
+
+[STEP 3/5] Model Egitimi...
+[DATA] Toplam: 200 görüntü
+[DATA] Sınıf dağılımı: {1: np.int64(100), 0: np.int64(100)}
+[DATA] Normal: 100, Hemorrhage: 100
+
+============================================================
+DATA SPLIT SUMMARY (Veri Bölümleme Özeti)
+============================================================
+Set            Toplam   Normal   Hemorrhage     Oran
+------------------------------------------------------------
+Train             139       69           70    69.5%
+Validation         31       16           15    15.5%
+Test               30       15           15    15.0%
+------------------------------------------------------------
+TOPLAM            200
+============================================================
+[CHECK] Train hemorrhage oranı: 50.36% (hedef: ~50.00%)
+[CHECK] Validation hemorrhage oranı: 48.39% (hedef: ~50.00%)
+[CHECK] Test hemorrhage oranı: 50.00% (hedef: ~50.00%)
+
+[PREPROCESS] Train setinden normalizasyon istatistikleri hesaplanıyor...
+[PREPROCESS] Mean: [0.4052, 0.4082, 0.4113]
+[PREPROCESS] Std:  [0.3084, 0.3090, 0.3093]
+
+[DATA] Train: 139 örnek
+[DATA] Validation: 31 örnek
+[DATA] Augmentation: Aktif
+
+======================================================================
+MODEL 1: ConvNeXt-Tiny -> Zaten egitilmis, atlaniyor.
+======================================================================
+
+======================================================================
+MODEL 2: Custom CNN -> Zaten egitilmis, atlaniyor.
+======================================================================
+
+======================================================================
+EĞİTİM TAMAMLANDI!
+======================================================================
+Modeller: C:\Users\MONSTER\Desktop\D--2\models
+Grafikler: C:\Users\MONSTER\Desktop\D--2\results
+
+======================================================================
+PIPELINE TAMAMLANDI!
+======================================================================
+
+Ciktilar:
+  Modeller     : C:\Users\MONSTER\Desktop\D--2\models/
+  Grafikler    : C:\Users\MONSTER\Desktop\D--2\results/
+
+Olusturulan grafikler:
+  [OK] augmentation_preview.png
+  [OK] dataset_overview.png
+  [OK] convnext_training_curves.png
+  [OK] custom_cnn_training_curves.png
+  [OK] convnext_tiny_training_analysis.png
+  [OK] custom_cnn_training_analysis.png
+  [OK] convnext_tiny_confusion_matrix.png
+  [OK] custom_cnn_confusion_matrix.png
+  [OK] model_comparison.png
+  [OK] roc_auc_curves.png
+  [OK] convnext_tiny_tsne.png
+  [OK] custom_cnn_tsne.png
+  [OK] convnext_tiny_gradcam.png
+  [OK] custom_cnn_gradcam.png
+  [OK] convnext_grid_search.png
+  [OK] custom_cnn_grid_search.png
+
+Arayuzu baslatmak icin:
+  python main.py --app
+======================================================================
