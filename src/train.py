@@ -156,14 +156,19 @@ def train_one_epoch(
         images, labels = images.to(device), labels.to(device)
 
         if use_mixup and model.training:
-            mixed_images, y_a, y_b, lam = mixup_data(
-                images, labels, mixup_alpha
-            )
+            # 50% Mixup, 50% CutMix — her ikisi de spatial genellemeyi artırır
+            if np.random.random() < 0.5:
+                mixed_images, y_a, y_b, lam = mixup_data(
+                    images, labels, mixup_alpha
+                )
+            else:
+                mixed_images, y_a, y_b, lam = cutmix_data(
+                    images, labels, mixup_alpha
+                )
             optimizer.zero_grad()
             outputs = model(mixed_images)
             loss = mixup_criterion(criterion, outputs, y_a, y_b, lam)
             _, predicted = outputs.max(1)
-            # Mixup accuracy: y_a is the primary label (lam weighted heavier on average)
             correct += predicted.eq(y_a).sum().item()
         else:
             optimizer.zero_grad()
