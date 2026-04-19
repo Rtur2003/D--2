@@ -321,6 +321,13 @@ footer { display: none !important; }
 _cache = {}
 
 
+def _load_one_custom(path):
+    m = get_custom_cnn()
+    ckpt = torch.load(str(path), map_location=DEVICE, weights_only=False)
+    m.load_state_dict(ckpt["model_state_dict"])
+    return m.eval().to(DEVICE)
+
+
 def _load_models():
     if "convnext" in _cache:
         return
@@ -335,13 +342,13 @@ def _load_models():
     convnext.load_state_dict(ckpt["model_state_dict"])
     convnext.eval().to(DEVICE)
 
-    custom = get_custom_cnn()
-    ckpt = torch.load(
-        str(MODELS_DIR / "custom_cnn_best.pth"),
-        map_location=DEVICE, weights_only=False
-    )
-    custom.load_state_dict(ckpt["model_state_dict"])
-    custom.eval().to(DEVICE)
+    az_path  = MODELS_DIR / "custom_cnn_best.azveri.pth"
+    cok_path = MODELS_DIR / "custom_cnn_best.cok.veri.pth"
+    old_path = MODELS_DIR / "custom_cnn_best.pth"
+
+    custom_az  = _load_one_custom(az_path)  if az_path.exists()  else \
+                 _load_one_custom(old_path) if old_path.exists() else None
+    custom_cok = _load_one_custom(cok_path) if cok_path.exists() else None
 
     transform = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
@@ -350,9 +357,11 @@ def _load_models():
     ])
 
     _cache.update({
-        "convnext": convnext,
-        "custom": custom,
-        "transform": transform,
+        "convnext":   convnext,
+        "custom_az":  custom_az,
+        "custom_cok": custom_cok,
+        "custom":     custom_az,   # geriye dönük uyumluluk
+        "transform":  transform,
     })
 
 
@@ -443,24 +452,32 @@ def predict(image, model_choice: str):
     tensor = tf(image).unsqueeze(0).to(DEVICE)
 
     with torch.no_grad():
-        p1 = torch.softmax(_cache["convnext"](tensor), dim=1)[0].cpu().numpy()
-        p2 = torch.softmax(_cache["custom"](tensor), dim=1)[0].cpu().numpy()
+        p_cnx = torch.softmax(_cache["convnext"](tensor), dim=1)[0].cpu().numpy()
+        _az  = _cache["custom_az"]
+        _cok = _cache["custom_cok"]
+        p_az  = torch.softmax(_az(tensor),  dim=1)[0].cpu().numpy() if _az  else p_cnx
+        p_cok = torch.softmax(_cok(tensor), dim=1)[0].cpu().numpy() if _cok else p_cnx
 
     if "Ensemble" in model_choice:
-        probs = 0.5 * p1 + 0.5 * p2
-        cam_name = "convnext"
+        probs = 0.5 * p_cnx + 0.5 * p_az
         model_label = "Ensemble"
         cam_model = _cache["convnext"]
+        cam_name  = "convnext"
     elif "ConvNeXt" in model_choice:
-        probs = p1
-        cam_name = "convnext"
+        probs = p_cnx
         model_label = "ConvNeXt-Tiny"
         cam_model = _cache["convnext"]
+        cam_name  = "convnext"
+    elif "Cok Veri" in model_choice or "cok" in model_choice.lower():
+        probs = p_cok
+        model_label = "Custom CNN (Cok Veri)"
+        cam_model = _cok
+        cam_name  = "custom"
     else:
-        probs = p2
-        cam_name = "custom"
-        model_label = "Custom CNN"
-        cam_model = _cache["custom"]
+        probs = p_az
+        model_label = "Custom CNN (Az Veri)"
+        cam_model = _az
+        cam_name  = "custom"
 
     scores = {CLASS_NAMES[i]: float(probs[i]) for i in range(len(CLASS_NAMES))}
     pred = CLASS_NAMES[probs.argmax()]
@@ -529,7 +546,8 @@ def build_ui():
                 model_choice = gr.Radio(
                     choices=[
                         "ConvNeXt-Tiny — Transfer Learning",
-                        "Custom CNN — Ozgun Mimari",
+                        "Custom CNN Az Veri — 200 Goruntu",
+                        "Custom CNN Cok Veri — Buyuk Dataset",
                         "Ensemble — Soft Voting",
                     ],
                     value="Ensemble — Soft Voting",
