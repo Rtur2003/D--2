@@ -11,7 +11,13 @@
       "Bash(python main.py --webcrawl)",
       "Bash(echo \"PID: $!\")",
       "Bash(echo \"Exit: $?\")",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(cp \"C:/Users/MONSTER/Desktop/Rumeysa/D--2-main/models/convnext_tiny_best.pth\" \"c:/Users/MONSTER/Desktop/D--2/models/\")",
+      "Bash(cp \"C:/Users/MONSTER/Desktop/Rumeysa/D--2-main/models/custom_cnn_best.pth\" \"c:/Users/MONSTER/Desktop/D--2/models/\")",
+      "Bash(pkill -f \"main.py --app\")",
+      "Bash(pkill -f \"app_log\" netstat -ano)",
+      "Bash(awk '{print $5}')",
+      "Bash(xargs -r taskkill /PID /F echo \"Temizlendi\")"
     ]
   }
 }

@@ -487,16 +487,7 @@ def predict(image, model_choice: str):
 
 
 def build_ui():
-    with gr.Blocks(
-        title="NeuroScan AI",
-        css=CSS,
-        theme=gr.themes.Base(
-            primary_hue=gr.themes.colors.blue,
-            neutral_hue=gr.themes.colors.stone,
-            font=[gr.themes.GoogleFont("Inter"), "sans-serif"],
-            font_mono=[gr.themes.GoogleFont("JetBrains Mono"), "monospace"],
-        ),
-    ) as demo:
+    with gr.Blocks(title="NeuroScan AI") as demo:
 
         gr.HTML("""
         <div class="ns-topbar">
@@ -627,9 +618,23 @@ def build_ui():
     return demo
 
 
+_THEME = gr.themes.Base(
+    primary_hue=gr.themes.colors.blue,
+    neutral_hue=gr.themes.colors.stone,
+    font=[gr.themes.GoogleFont("Inter"), "sans-serif"],
+    font_mono=[gr.themes.GoogleFont("JetBrains Mono"), "monospace"],
+)
+
+
 def launch_interface():
     demo = build_ui()
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
+    demo.launch(
+        server_name="127.0.0.1",
+        server_port=7860,
+        share=False,
+        theme=_THEME,
+        css=CSS,
+    )
 
 
 if __name__ == "__main__":
