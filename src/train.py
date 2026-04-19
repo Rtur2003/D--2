@@ -135,8 +135,8 @@ def train_one_epoch(
             outputs = model(mixed_images)
             loss = mixup_criterion(criterion, outputs, y_a, y_b, lam)
             _, predicted = outputs.max(1)
-            dominant = y_a if lam >= 0.5 else y_b
-            correct += predicted.eq(dominant).sum().item()
+            # Mixup accuracy: y_a is the primary label (lam weighted heavier on average)
+            correct += predicted.eq(y_a).sum().item()
         else:
             optimizer.zero_grad()
             outputs = model(images)
