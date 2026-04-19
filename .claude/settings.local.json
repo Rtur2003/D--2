@@ -8,7 +8,8 @@
       "Bash(python -c ' *)",
       "Bash(python src/extract_features.py)",
       "Bash(python src/download_web_samples.py)",
-      "Bash(python main.py --webcrawl)"
+      "Bash(python main.py --webcrawl)",
+      "Bash(echo \"PID: $!\")"
     ]
   }
 }
