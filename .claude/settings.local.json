@@ -17,7 +17,8 @@
       "Bash(pkill -f \"main.py --app\")",
       "Bash(pkill -f \"app_log\" netstat -ano)",
       "Bash(awk '{print $5}')",
-      "Bash(xargs -r taskkill /PID /F echo \"Temizlendi\")"
+      "Bash(xargs -r taskkill /PID /F echo \"Temizlendi\")",
+      "Bash(tee training_log.txt)"
     ]
   }
 }
