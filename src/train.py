@@ -106,6 +106,34 @@ def mixup_criterion(criterion, pred, y_a, y_b, lam):
     return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
 
 
+def cutmix_data(x, y, alpha=1.0):
+    """
+    CutMix: bir görüntünün dikdörtgen bölgesini başkasıyla değiştir.
+
+    Mixup'tan farkı: piksel karışımı yerine bölge yapıştırma.
+    Spatial feature öğrenmeyi zorlar — dağılım kaymasına karşı güçlü.
+    Referans: Yun et al. (2019) "CutMix: Training Strategy..."
+    """
+    lam = np.random.beta(alpha, alpha)
+    bs = x.size(0)
+    idx = torch.randperm(bs, device=x.device)
+    y_a, y_b = y, y[idx]
+
+    W, H = x.size(3), x.size(2)
+    cut_rat = np.sqrt(1.0 - lam)
+    cut_w, cut_h = int(W * cut_rat), int(H * cut_rat)
+    cx, cy = np.random.randint(W), np.random.randint(H)
+    x1 = max(0, cx - cut_w // 2)
+    x2 = min(W, cx + cut_w // 2)
+    y1 = max(0, cy - cut_h // 2)
+    y2 = min(H, cy + cut_h // 2)
+
+    x_new = x.clone()
+    x_new[:, :, y1:y2, x1:x2] = x[idx, :, y1:y2, x1:x2]
+    lam = 1 - (x2 - x1) * (y2 - y1) / (W * H)
+    return x_new, y_a, y_b, lam
+
+
 # ── EĞİTİM FONKSİYONLARI ───────────────────────────────────────────────
 
 def train_one_epoch(
