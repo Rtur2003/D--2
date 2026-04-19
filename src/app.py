@@ -539,8 +539,9 @@ def build_ui():
                     choices=[
                         "ConvNeXt-Tiny — Transfer Learning",
                         "Custom CNN — Ozgun Mimari",
+                        "Ensemble — Soft Voting",
                     ],
-                    value="ConvNeXt-Tiny — Transfer Learning",
+                    value="Ensemble — Soft Voting",
                     label="", show_label=False,
                 )
                 gr.HTML("</div>")
