@@ -358,11 +358,52 @@ def plot_comparison(all_metrics: Dict) -> None:
     models = [m["model_name"] for m in all_metrics.values()]
     metrics_names = ["Accuracy", "Precision", "Recall", "F1-Score"]
     colors = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b"]
+    # Veri setini ve istatistikleri tekrar yükle (NameError: test_paths hatasını önlemek için)
+    _, _, test_df = get_split_data()
+    test_paths = test_df["image_path"].tolist()
+    test_labels = test_df["label"].tolist()
+
+    stats_path = MODELS_DIR / "train_stats.json"
+    with open(str(stats_path), "r") as f:
+        stats = json.load(f)
+    mean, std = stats["mean"], stats["std"]
 
     values = []
     for m in all_metrics.values():
         values.append([
+            m["accuracy"], m["precision_weighted"],            m["recall_weighted"], m["f1_weighted"]
+        ]
+    )
+
+    # Terminal çıktısı için 3 model kontrolü ve eklenmesi
+    # (Eğer klasörde az_veri ve cok_veri checkpointleri varsa onları da listeye ekle)
+    available_checkpoints = list(MODELS_DIR.glob("custom_cnn_best*.pth"))
+    if len(available_checkpoints) > 1:
+        # Mevcut metrics sözlüğünü temizle ve tüm checkpointleri değerlendir
+        all_metrics = {}
+        # Önce ConvNeXt
+        if (MODELS_DIR / "convnext_tiny_best.pth").exists():
+            convnext = get_convnext_model(pretrained=False)
+            ckpt = torch.load(str(MODELS_DIR / "convnext_tiny_best.pth"), map_location=DEVICE, weights_only=False)
+            convnext.load_state_dict(ckpt["model_state_dict"])
+            all_metrics["convnext"] = evaluate_model(convnext, "ConvNeXt-Tiny", test_paths, test_labels, mean, std)
+
+        # Sonra tüm Custom CNN varyasyonlarını (Az Veri, Normal, Çok Veri)
+        for ckpt_path in available_checkpoints:
+            suffix = ckpt_path.stem.replace("custom_cnn_best", "").replace(".", " ").strip()
+            display_name = f"Custom CNN ({suffix})" if suffix else "Custom CNN (Normal)"
+            
+            c_model = get_custom_cnn()
+            ckpt = torch.load(str(ckpt_path), map_location=DEVICE, weights_only=False)
+            c_model.load_state_dict(ckpt["model_state_dict"])
+            all_metrics[ckpt_path.stem] = evaluate_model(c_model, display_name, test_paths, test_labels, mean, std)
+
+    models = [m["model_name"] for m in all_metrics.values()]
+    values = []
+    for m in all_metrics.values():
+        values.append([
             m["accuracy"], m["precision_weighted"],
+
             m["recall_weighted"], m["f1_weighted"]
         ])
 
