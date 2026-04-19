@@ -546,8 +546,8 @@ def build_ui():
                 model_choice = gr.Radio(
                     choices=[
                         "ConvNeXt-Tiny — Transfer Learning",
-                        "Custom CNN Az Veri — 200 Goruntu",
-                        "Custom CNN Cok Veri — Buyuk Dataset",
+                        "Custom CNN ",
+                        "Custom CNN Ç",
                         "Ensemble — Soft Voting",
                     ],
                     value="Ensemble — Soft Voting",
