@@ -52,6 +52,8 @@ def main():
                         help="Augmentation onizleme")
     parser.add_argument("--all", action="store_true",
                         help="Tum pipeline (tune + train + eval)")
+    parser.add_argument("--train-v2", action="store_true",
+                        help="Buyuk veri seti (data_v2) ile her iki modeli yeniden egit")
 
     args = parser.parse_args()
 
@@ -84,8 +86,14 @@ def main():
         from hyperparameter_tuning import run_hyperparameter_tuning
         run_hyperparameter_tuning()
 
+    # ── Training v2 (büyük veri seti) ─────────────────────────────
+    if getattr(args, "train_v2", False):
+        print("\n[V2] Buyuk Veri Seti Egitimi (data_v2)...")
+        from train import run_training_v2
+        run_training_v2()
+
     # ── Training ───────────────────────────────────────────────────
-    if args.train or args.all:
+    elif args.train or args.all:
         print("\n[STEP 3/5] Model Egitimi...")
         from train import run_training
         run_training(augment=True)
