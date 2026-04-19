@@ -1,488 +1,627 @@
 import json
-import os
-import socket
-from datetime import datetime
-
 import torch
 import numpy as np
 from PIL import Image
 from torchvision import transforms
+
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: F401  (reserved for future chart exports)
 
 import gradio as gr
 
-from config import DEVICE, MODELS_DIR, CLASS_NAMES, IMG_SIZE, DATA_DIR
+from config import DEVICE, MODELS_DIR, CLASS_NAMES, IMG_SIZE
 from custom_cnn import get_custom_cnn
 from pretrained_model import get_convnext_model
 from gradcam import GradCAM, get_target_layer, overlay_cam_on_image
 
 
-_models_cache = {}
-_prediction_counter = {"count": 0, "last_time": None}
+CSS = """
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
-MODEL_LABELS = {
-    "convnext": "ConvNeXt-Tiny (Pre-trained)",
-    "custom": "Custom CNN (Ozgun)",
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    --bg:        #F7F6F3;
+    --bg-1:      #FFFFFF;
+    --bg-2:      #F0EEE9;
+    --bg-3:      #E8E5DF;
+    --ink:       #111110;
+    --ink-2:     #2C2C2A;
+    --ink-3:     #5A5956;
+    --ink-4:     #8A8884;
+    --border:    #E0DDD8;
+    --border-2:  #C8C5C0;
+    --accent:    #2563EB;
+    --accent-bg: #EFF4FF;
+    --green:     #16A34A;
+    --green-bg:  #F0FDF4;
+    --green-text:#15803D;
+    --red:       #DC2626;
+    --red-bg:    #FEF2F2;
+    --red-text:  #B91C1C;
+    --radius:    10px;
+    --radius-s:  7px;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', sans-serif;
 }
 
-
-MEDICAL_THEME = gr.themes.Base(
-    primary_hue=gr.themes.colors.slate,
-    secondary_hue=gr.themes.colors.teal,
-    neutral_hue=gr.themes.colors.slate,
-    font=(gr.themes.GoogleFont("Inter"), "ui-sans-serif", "sans-serif"),
-    font_mono=(gr.themes.GoogleFont("JetBrains Mono"), "ui-monospace", "monospace"),
-).set(
-    body_background_fill="#f8fafc",
-    body_background_fill_dark="#0f172a",
-    background_fill_primary="#ffffff",
-    background_fill_primary_dark="#1e293b",
-    block_background_fill="#ffffff",
-    block_background_fill_dark="#1e293b",
-    block_border_width="1px",
-    block_border_color="#e2e8f0",
-    block_title_text_weight="600",
-    block_label_text_weight="500",
-    block_radius="10px",
-    button_primary_background_fill="linear-gradient(135deg, #1e3a5f 0%, #0f766e 100%)",
-    button_primary_background_fill_hover="linear-gradient(135deg, #1e40af 0%, #0d9488 100%)",
-    button_primary_text_color="#ffffff",
-    button_primary_border_color="#1e3a5f",
-    button_secondary_background_fill="#f1f5f9",
-    button_secondary_background_fill_hover="#e2e8f0",
-    button_secondary_text_color="#1e293b",
-    input_background_fill="#ffffff",
-    input_border_color="#cbd5e1",
-    input_border_color_focus="#0f766e",
-    color_accent_soft="#ccfbf1",
-)
-
-
-CUSTOM_CSS = """
-.gradio-container { max-width: 1400px !important; margin: 0 auto !important; }
-
-.app-header {
-    background: linear-gradient(135deg, #1e3a5f 0%, #0f766e 100%);
-    color: white; padding: 22px 28px; border-radius: 12px;
-    margin-bottom: 18px; box-shadow: 0 4px 14px rgba(30, 58, 95, 0.18);
+body, .gradio-container {
+    background: var(--bg) !important;
+    font-family: var(--sans) !important;
+    color: var(--ink) !important;
+    min-height: 100vh !important;
 }
-.app-header h1 { margin: 0; font-size: 1.55rem; font-weight: 600; letter-spacing: -0.01em; }
-.app-header .subtitle { opacity: 0.88; font-size: 0.92rem; margin-top: 4px; }
-.app-header .badge-row { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
-.app-header .badge {
-    background: rgba(255,255,255,0.14); padding: 3px 10px;
-    border-radius: 999px; font-size: 0.72rem; letter-spacing: 0.02em;
-    border: 1px solid rgba(255,255,255,0.25);
-}
+.gradio-container { max-width: 100% !important; padding: 0 !important; }
+footer { display: none !important; }
+.gradio-container > .main { padding: 0 !important; }
+.gradio-container .gap { gap: 0 !important; }
 
-.status-card {
-    background: #ecfdf5; border: 1px solid #a7f3d0;
-    padding: 10px 14px; border-radius: 8px; font-size: 0.85rem;
-    color: #065f46; font-family: 'JetBrains Mono', monospace;
+/* TOPBAR */
+.ns-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    height: 54px;
+    background: var(--bg-1);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
 }
-.status-card.busy { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
-.status-card.error { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.ns-brand { display: flex; align-items: center; gap: 12px; }
+.ns-logo {
+    width: 32px; height: 32px;
+    background: var(--ink);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.ns-title { font-size: 14px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em; }
+.ns-version {
+    font-size: 11px; color: var(--ink-4); font-family: var(--mono);
+    background: var(--bg-2); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px;
+}
+.ns-tags { display: flex; gap: 6px; align-items: center; }
+.ns-tag {
+    font-size: 11px; font-family: var(--mono); color: var(--ink-3);
+    background: var(--bg-2); border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: 5px;
+    display: flex; align-items: center; gap: 5px;
+}
+.ns-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
 
-.result-tabs .tab-nav { border-bottom: 2px solid #e2e8f0; }
-.result-tabs button.selected {
-    border-bottom-color: #0f766e !important;
-    color: #0f766e !important; font-weight: 600;
+/* BODY LAYOUT */
+.ns-body {
+    display: grid !important;
+    grid-template-columns: 280px 1fr !important;
+    min-height: calc(100vh - 54px);
 }
 
-.disclaimer {
-    background: #fffbeb; border-left: 4px solid #f59e0b;
-    padding: 10px 14px; border-radius: 4px; margin-top: 16px;
-    font-size: 0.82rem; color: #78350f;
+/* SIDEBAR */
+.ns-sidebar {
+    background: var(--bg-1) !important;
+    border-right: 1px solid var(--border) !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+.ns-block { padding: 18px 20px; border-bottom: 1px solid var(--border); }
+.ns-block-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-4);
+    margin-bottom: 12px; font-family: var(--mono);
 }
 
-.sidebar-section { margin-top: 18px; }
-.sidebar-section h4 {
-    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em;
-    color: #64748b; font-weight: 600; margin: 0 0 8px 0;
+/* UPLOAD */
+.gr-image {
+    border: 1.5px dashed var(--border-2) !important;
+    border-radius: var(--radius-s) !important;
+    background: var(--bg-2) !important;
+    transition: all .2s !important;
+    min-height: 170px !important;
+}
+.gr-image:hover {
+    border-color: var(--accent) !important;
+    background: var(--accent-bg) !important;
 }
 
-.metric-row { display: flex; gap: 12px; margin-top: 8px; }
-.metric-pill {
-    flex: 1; background: #f1f5f9; padding: 10px 12px; border-radius: 8px;
-    border: 1px solid #e2e8f0;
+/* RADIO */
+.gr-form, .gr-panel { background: transparent !important; border: none !important; box-shadow: none !important; }
+.gr-radio-group { gap: 5px !important; }
+.gr-radio-group label {
+    font-family: var(--sans) !important;
+    font-size: 13px !important;
+    font-weight: 400 !important;
+    color: var(--ink-2) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-s) !important;
+    padding: 10px 14px !important;
+    background: var(--bg-2) !important;
+    cursor: pointer !important;
+    transition: all .15s !important;
 }
-.metric-pill .label {
-    font-size: 0.7rem; color: #64748b; text-transform: uppercase;
-    letter-spacing: 0.06em; margin-bottom: 3px;
+.gr-radio-group label:hover {
+    background: var(--bg-1) !important;
+    border-color: var(--border-2) !important;
+    color: var(--ink) !important;
 }
-.metric-pill .value {
-    font-size: 1.1rem; font-weight: 600; color: #0f172a;
-    font-family: 'JetBrains Mono', monospace;
+.gr-radio-group label:has(input:checked) {
+    background: var(--accent-bg) !important;
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+    font-weight: 500 !important;
 }
 
-.app-footer {
-    margin-top: 24px; padding: 14px 18px;
-    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
-    font-size: 0.78rem; color: #64748b;
+/* RUN BUTTON */
+#run-btn {
+    background: var(--ink) !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: var(--radius-s) !important;
+    font-family: var(--sans) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    padding: 13px 20px !important;
+    width: 100% !important;
+    cursor: pointer !important;
+    transition: all .18s !important;
+    margin: 0 !important;
 }
-.app-footer strong { color: #334155; }
+#run-btn:hover { background: var(--ink-2) !important; transform: translateY(-1px) !important; }
+#run-btn:active { transform: translateY(0) !important; }
+
+/* META CARDS */
+.ns-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ns-meta-card {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: var(--radius-s); padding: 9px 11px;
+}
+.ns-meta-k { font-size: 9px; font-family: var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 3px; }
+.ns-meta-v { font-size: 12px; font-weight: 600; color: var(--ink-2); font-family: var(--mono); }
+
+.ns-disc {
+    margin-top: auto; padding: 14px 20px;
+    font-size: 10px; font-family: var(--mono); color: var(--ink-4);
+    letter-spacing: 0.04em; text-align: center;
+    border-top: 1px solid var(--border); line-height: 1.8;
+}
+
+/* MAIN */
+.ns-main { background: var(--bg) !important; }
+
+/* PANEL */
+.ns-panel {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.ns-panel-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg-2);
+}
+.ns-panel-title {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-3); font-family: var(--mono);
+}
+.ns-panel-badge {
+    font-size: 9px; font-family: var(--mono); color: var(--accent);
+    background: var(--accent-bg); border: 1px solid #BFDBFE;
+    padding: 2px 8px; border-radius: 4px;
+}
+.ns-panel-body { padding: 16px; }
+
+/* LABEL */
+.gr-label {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+}
+.gr-label .label-container,
+.gr-label .label-container > div { display: block !important; visibility: visible !important; }
+.gr-label .label-container .bar-container { margin-bottom: 10px !important; }
+.gr-label .label-container .bar { height: 6px !important; border-radius: 3px !important; background: var(--accent) !important; }
+.gr-label .label-container .bar-bg { height: 6px !important; border-radius: 3px !important; background: var(--bg-3) !important; }
+.gr-label .label-container .category { font-size: 13px !important; font-weight: 500 !important; color: var(--ink) !important; font-family: var(--sans) !important; }
+.gr-label .label-container .confidence { font-size: 13px !important; font-weight: 600 !important; color: var(--ink-2) !important; font-family: var(--mono) !important; }
+
+/* GRADCAM */
+.gr-image-output {
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: hidden !important;
+    background: var(--bg-3) !important;
+}
+
+/* REPORT HTML */
+.ns-report-wrap { padding: 16px 24px 24px; }
+.ns-report-panel {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.ns-report-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg-2);
+}
+.ns-report-body { padding: 20px 22px; }
+.ns-report-divider {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 18px;
+}
+.ns-report-divider-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ns-report-divider-label {
+    font-size: 11px; font-weight: 500; color: var(--ink-4);
+    font-family: var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
+}
+.ns-report-divider-line { flex: 1; height: 1px; background: var(--border); }
+.ns-stat-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    margin-bottom: 20px;
+}
+.ns-stat-card {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    padding: 11px 13px;
+}
+.ns-stat-label {
+    font-size: 9px; font-family: var(--mono); letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-4); margin-bottom: 5px;
+}
+.ns-stat-value { font-size: 15px; font-weight: 600; color: var(--ink); }
+.ns-stat-value.positive { color: var(--green-text); }
+.ns-stat-value.negative { color: var(--red-text); }
+.ns-stat-value.mono { font-family: var(--mono); font-size: 12px; }
+.ns-bar-row { margin-bottom: 13px; }
+.ns-bar-top {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 6px;
+}
+.ns-bar-name { font-size: 13px; font-weight: 500; color: var(--ink); }
+.ns-bar-pct { font-size: 12px; font-weight: 600; font-family: var(--mono); }
+.ns-bar-track {
+    height: 6px; background: var(--bg-3); border-radius: 3px;
+    overflow: hidden; border: 1px solid var(--border);
+}
+.ns-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+.ns-placeholder {
+    text-align: center; padding: 32px 20px;
+    color: var(--ink-4); font-size: 12px;
+    font-family: var(--mono); letter-spacing: 0.04em;
+}
+.ns-section-sub {
+    font-size: 9px; font-family: var(--mono); letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-4);
+    margin: 14px 0 10px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+
+/* GRADIO BLOCK OVERRIDES */
+.gradio-container .block {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+}
 """
 
-
-def _get_stats():
-    stats_path = MODELS_DIR / "train_stats.json"
-    with open(str(stats_path), "r") as f:
-        return json.load(f)
+_cache = {}
 
 
-def _get_transform(stats):
-    return transforms.Compose([
+def _load_models():
+    if "convnext" in _cache:
+        return
+    with open(str(MODELS_DIR / "train_stats.json"), "r") as f:
+        stats = json.load(f)
+
+    convnext = get_convnext_model(pretrained=False)
+    ckpt = torch.load(
+        str(MODELS_DIR / "convnext_tiny_best.pth"),
+        map_location=DEVICE, weights_only=False
+    )
+    convnext.load_state_dict(ckpt["model_state_dict"])
+    convnext.eval().to(DEVICE)
+
+    custom = get_custom_cnn()
+    ckpt = torch.load(
+        str(MODELS_DIR / "custom_cnn_best.pth"),
+        map_location=DEVICE, weights_only=False
+    )
+    custom.load_state_dict(ckpt["model_state_dict"])
+    custom.eval().to(DEVICE)
+
+    transform = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
         transforms.Normalize(mean=stats["mean"], std=stats["std"]),
     ])
 
-
-def _load_models():
-    if "convnext" in _models_cache:
-        return
-
-    stats = _get_stats()
-
-    convnext = get_convnext_model(pretrained=False)
-    ckpt = torch.load(str(MODELS_DIR / "convnext_tiny_best.pth"), map_location=DEVICE, weights_only=False)
-    convnext.load_state_dict(ckpt["model_state_dict"])
-    convnext.eval().to(DEVICE)
-
-    custom = get_custom_cnn()
-    ckpt = torch.load(str(MODELS_DIR / "custom_cnn_best.pth"), map_location=DEVICE, weights_only=False)
-    custom.load_state_dict(ckpt["model_state_dict"])
-    custom.eval().to(DEVICE)
-
-    _models_cache.update({
+    _cache.update({
         "convnext": convnext,
         "custom": custom,
-        "stats": stats,
-        "transform": _get_transform(stats),
+        "transform": transform,
     })
 
 
-def _tta_forward(model, input_tensor):
-    """4-view test-time augmentation: identity, hflip, vflip, 180-rot. Averages softmax."""
-    views = [
-        input_tensor,
-        torch.flip(input_tensor, dims=[3]),
-        torch.flip(input_tensor, dims=[2]),
-        torch.flip(input_tensor, dims=[2, 3]),
-    ]
-    probs_stack = []
-    with torch.no_grad():
-        for v in views:
-            logits = model(v)
-            probs_stack.append(torch.softmax(logits, dim=1))
-    return torch.stack(probs_stack, dim=0).mean(dim=0)
+def _render_bar(name: str, score: float, is_primary: bool) -> str:
+    pct = score * 100
+    bar_color = "#16A34A" if is_primary else "#C8C5C0"
+    pct_color = "#15803D" if is_primary else "#8A8884"
+    return f"""
+    <div class="ns-bar-row">
+      <div class="ns-bar-top">
+        <span class="ns-bar-name">{name}</span>
+        <span class="ns-bar-pct" style="color:{pct_color}">{pct:.1f}%</span>
+      </div>
+      <div class="ns-bar-track">
+        <div class="ns-bar-fill" style="width:{pct:.1f}%;background:{bar_color}"></div>
+      </div>
+    </div>"""
 
 
-def _confidence_banner(pred_class: str, confidence: float) -> str:
-    color = "#0f766e" if pred_class == "Normal" else "#be123c"
-    icon = "Normal" if pred_class == "Normal" else "Kanama Suphesi"
-    return (
-        f"<div style='padding:14px 18px;border-radius:10px;"
-        f"background:linear-gradient(135deg,{color} 0%,{color}cc 100%);"
-        f"color:white;font-family:Inter,sans-serif;'>"
-        f"<div style='font-size:0.75rem;opacity:0.85;letter-spacing:0.08em;"
-        f"text-transform:uppercase;'>Sonuc</div>"
-        f"<div style='font-size:1.4rem;font-weight:600;margin-top:2px;'>{icon}</div>"
-        f"<div style='margin-top:8px;font-size:0.85rem;opacity:0.92;'>"
-        f"Guven skoru: <b>{confidence:.1%}</b></div></div>"
+def _build_report_html(scores: dict, pred: str, conf: float, model_name: str) -> str:
+    diag_color = "positive" if pred.lower() == "normal" else "negative"
+    diag_dot_color = "#16A34A" if pred.lower() == "normal" else "#DC2626"
+
+    bars_html = "".join(
+        _render_bar(cls, score, cls == pred)
+        for cls, score in scores.items()
     )
 
+    return f"""
+    <div class="ns-report-wrap">
+      <div class="ns-report-panel">
+        <div class="ns-report-head">
+          <span class="ns-panel-title">Detayli Rapor</span>
+          <span class="ns-panel-badge">Analysis Output</span>
+        </div>
+        <div class="ns-report-body">
+          <div class="ns-report-divider">
+            <div class="ns-report-divider-dot" style="background:{diag_dot_color}"></div>
+            <span class="ns-report-divider-label">Analysis Report</span>
+            <div class="ns-report-divider-line"></div>
+          </div>
+          <div class="ns-stat-grid">
+            <div class="ns-stat-card">
+              <div class="ns-stat-label">Diagnosis</div>
+              <div class="ns-stat-value {diag_color}">{pred}</div>
+            </div>
+            <div class="ns-stat-card">
+              <div class="ns-stat-label">Confidence</div>
+              <div class="ns-stat-value">{conf*100:.1f}%</div>
+            </div>
+            <div class="ns-stat-card">
+              <div class="ns-stat-label">Model</div>
+              <div class="ns-stat-value mono">{model_name}</div>
+            </div>
+          </div>
+          <div class="ns-section-sub">Class Scores</div>
+          {bars_html}
+        </div>
+      </div>
+    </div>"""
 
-def _status_html(text: str, kind: str = "ready") -> str:
-    cls = {"ready": "status-card", "busy": "status-card busy", "error": "status-card error"}[kind]
-    return f"<div class='{cls}'>{text}</div>"
+
+def _placeholder_html() -> str:
+    return """
+    <div class="ns-report-wrap">
+      <div class="ns-report-panel">
+        <div class="ns-report-head">
+          <span class="ns-panel-title">Detayli Rapor</span>
+          <span class="ns-panel-badge">Analysis Output</span>
+        </div>
+        <div class="ns-placeholder">
+          // Goruntu yukleyip analizi baslatın
+        </div>
+      </div>
+    </div>"""
 
 
-def predict(image, model_choice_label: str, use_tta: bool, show_gradcam: bool):
-    """Single-entry predict; returns (banner_html, label_dict, gradcam_img, detail_text, status_html)."""
+def predict(image, model_choice: str):
     if image is None:
-        empty_banner = (
-            "<div style='padding:14px 18px;border-radius:10px;background:#f1f5f9;"
-            "color:#64748b;font-family:Inter,sans-serif;text-align:center;'>"
-            "Gorsel yukleyin veya asagidaki orneklerden birini secin."
-            "</div>"
-        )
-        return empty_banner, {}, None, "", _status_html("Bekleniyor: gorsel yok.", "ready")
+        return {}, None, _placeholder_html()
 
-    try:
-        _load_models()
-    except Exception as e:
-        return (
-            f"<div style='padding:14px;color:#991b1b;'>Model yukleme hatasi: {e}</div>",
-            {}, None, "", _status_html(f"Hata: {e}", "error"),
-        )
-
-    transform = _models_cache["transform"]
+    _load_models()
+    tf = _cache["transform"]
 
     if isinstance(image, np.ndarray):
         image = Image.fromarray(image)
     image = image.convert("RGB")
-    input_tensor = transform(image).unsqueeze(0).to(DEVICE)
+    tensor = tf(image).unsqueeze(0).to(DEVICE)
 
-    model_key = {v: k for k, v in MODEL_LABELS.items()}.get(model_choice_label, "convnext")
-    model = _models_cache[model_key]
-    model_for_cam = model
-    model_name_for_cam = model_key
-
-    if use_tta:
-        probs = _tta_forward(model, input_tensor)[0].cpu().numpy()
+    if "ConvNeXt" in model_choice:
+        model = _cache["convnext"]
+        cam_name = "convnext"
+        model_label = "ConvNeXt-Tiny"
     else:
-        with torch.no_grad():
-            probs = torch.softmax(model(input_tensor), dim=1)[0].cpu().numpy()
+        model = _cache["custom"]
+        cam_name = "custom"
+        model_label = "Custom CNN"
+
+    with torch.no_grad():
+        out = model(tensor)
+        probs = torch.softmax(out, dim=1)[0].cpu().numpy()
 
     scores = {CLASS_NAMES[i]: float(probs[i]) for i in range(len(CLASS_NAMES))}
-    pred = CLASS_NAMES[int(probs.argmax())]
+    pred = CLASS_NAMES[probs.argmax()]
     conf = float(probs.max())
 
-    detail_lines = [
-        f"MODEL: {MODEL_LABELS[model_key]}",
-        f"TTA: {'Acik (4-view)' if use_tta else 'Kapali'}",
-        f"Zaman: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        "",
-        f"Sonuc: {pred}  (guven: {conf:.2%})",
-        "",
-        "--- Olasilik Skorlari ---",
-        *[f"  {c}: {scores[c]:.4f}" for c in CLASS_NAMES],
-    ]
-    detail_text = "\n".join(detail_lines)
+    report_html = _build_report_html(scores, pred, conf, model_label)
 
-    gradcam_image = None
-    if show_gradcam:
-        grad_cam = None
-        try:
-            target_layer = get_target_layer(model_for_cam, model_name_for_cam)
-            grad_cam = GradCAM(model_for_cam, target_layer)
-            original_np = np.array(image.resize((IMG_SIZE, IMG_SIZE))) / 255.0
-            cam, _, _ = grad_cam.generate(transform(image).unsqueeze(0))
-            overlay = overlay_cam_on_image(original_np, cam, alpha=0.45)
-            gradcam_image = (overlay * 255).astype(np.uint8)
-        except Exception as e:
-            gradcam_image = np.array(image.resize((IMG_SIZE, IMG_SIZE)))
-            detail_text += f"\n\n[Grad-CAM uretilemedi: {e}]"
-        finally:
-            if grad_cam is not None:
-                grad_cam.remove_hooks()
-
-    _prediction_counter["count"] += 1
-    _prediction_counter["last_time"] = datetime.now().strftime("%H:%M:%S")
-    status_text = (
-        f"Analiz #{_prediction_counter['count']} | "
-        f"{MODEL_LABELS.get(model_key, model_choice_label)} | "
-        f"Son islem: {_prediction_counter['last_time']}"
-    )
-
-    banner = _confidence_banner(pred, conf)
-    return banner, scores, gradcam_image, detail_text, _status_html(status_text, "ready")
-
-
-def _example_paths():
-    """Galeri icin 6 ornek: 3 hemorrhage (001-099) + 3 normal (100-199)."""
-    candidates = [
-        ("001.png", "Kanama ornegi 1"),
-        ("015.png", "Kanama ornegi 2"),
-        ("042.png", "Kanama ornegi 3"),
-        ("105.png", "Normal ornek 1"),
-        ("130.png", "Normal ornek 2"),
-        ("172.png", "Normal ornek 3"),
-    ]
-    paths = []
-    for fname, _label in candidates:
-        p = DATA_DIR / fname
-        if p.exists():
-            paths.append([str(p)])
-    return paths
-
-
-def create_interface():
-    with gr.Blocks(title="Head CT Hemorrhage Classifier") as demo:
-        gr.HTML(
-            "<div class='app-header'>"
-            "<h1>Head CT Hemorrhage Classifier</h1>"
-            "<div class='subtitle'>Beyin kanamasi tespiti icin derin ogrenme tabanli karar destek arayuzu</div>"
-            "<div class='badge-row'>"
-            "<span class='badge'>ConvNeXt-Tiny + Custom CNN</span>"
-            "<span class='badge'>Grad-CAM Explainability</span>"
-            "<span class='badge'>Test-Time Augmentation</span>"
-            "</div></div>"
+    try:
+        layer = get_target_layer(model, cam_name)
+        gcam = GradCAM(model, layer)
+        orig = np.array(image.resize((IMG_SIZE, IMG_SIZE))) / 255.0
+        cam_map, _, _ = gcam.generate(tf(image).unsqueeze(0))
+        overlay = overlay_cam_on_image(orig, cam_map, alpha=0.45)
+        gradcam_img = (overlay * 255).astype(np.uint8)
+    except Exception as e:
+        gradcam_img = np.array(image.resize((IMG_SIZE, IMG_SIZE)))
+        report_html += (
+            f'<div style="padding:8px 22px;font-size:11px;'
+            f'font-family:var(--mono);color:#DC2626">'
+            f'[Grad-CAM error: {e}]</div>'
         )
 
-        with gr.Row():
-            with gr.Sidebar(position="left", width=300, open=True):
-                gr.HTML("<div class='sidebar-section'><h4>Model Secimi</h4></div>")
+    return scores, gradcam_img, report_html
+
+
+def build_ui():
+    with gr.Blocks(
+        title="NeuroScan AI",
+        css=CSS,
+        theme=gr.themes.Base(
+            primary_hue=gr.themes.colors.blue,
+            neutral_hue=gr.themes.colors.stone,
+            font=[gr.themes.GoogleFont("Inter"), "sans-serif"],
+            font_mono=[gr.themes.GoogleFont("JetBrains Mono"), "monospace"],
+        ),
+    ) as demo:
+
+        gr.HTML("""
+        <div class="ns-topbar">
+          <div class="ns-brand">
+            <div class="ns-logo">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+                   stroke="#F7F6F3" stroke-width="1.5">
+                <circle cx="8" cy="8" r="5.5"/>
+                <circle cx="8" cy="8" r="1.5" fill="#F7F6F3" stroke="none"/>
+                <line x1="8" y1="1" x2="8" y2="3.5"/>
+                <line x1="8" y1="12.5" x2="8" y2="15"/>
+                <line x1="1" y1="8" x2="3.5" y2="8"/>
+                <line x1="12.5" y1="8" x2="15" y2="8"/>
+              </svg>
+            </div>
+            <span class="ns-title">NeuroScan AI</span>
+            <span class="ns-version">v1.0</span>
+          </div>
+          <div class="ns-tags">
+            <div class="ns-tag"><div class="ns-dot"></div>Modeller hazir</div>
+            <div class="ns-tag">PyTorch</div>
+            <div class="ns-tag">Grad-CAM</div>
+          </div>
+        </div>
+        """)
+
+        with gr.Row(elem_classes=["ns-body"]):
+
+            with gr.Column(scale=0, min_width=280, elem_classes=["ns-sidebar"]):
+
+                gr.HTML('<div class="ns-block"><div class="ns-block-label">CT Goruntusu</div>')
+                image_input = gr.Image(
+                    label="", type="pil", height=170,
+                    show_label=False, sources=["upload", "clipboard"],
+                )
+                gr.HTML("</div>")
+
+                gr.HTML('<div class="ns-block"><div class="ns-block-label">Model Secimi</div>')
                 model_choice = gr.Radio(
-                    choices=list(MODEL_LABELS.values()),
-                    value=MODEL_LABELS["convnext"],
-                    label="",
-                    info="ConvNeXt-Tiny: ImageNet on-egitimli transfer ogrenme modeli.",
+                    choices=[
+                        "ConvNeXt-Tiny — Transfer Learning",
+                        "Custom CNN — Ozgun Mimari",
+                    ],
+                    value="ConvNeXt-Tiny — Transfer Learning",
+                    label="", show_label=False,
                 )
+                gr.HTML("</div>")
 
-                gr.HTML("<div class='sidebar-section'><h4>Gelismis</h4></div>")
-                use_tta = gr.Checkbox(
-                    label="Test-Time Augmentation (TTA)",
-                    value=True,
-                    info="4 goruntu varyantinin ortalamasi; +%1-3 dogruluk.",
+                gr.HTML('<div class="ns-block" style="border-bottom:none">')
+                predict_btn = gr.Button(
+                    "Analizi Baslat", variant="primary", elem_id="run-btn",
                 )
-                show_gradcam = gr.Checkbox(
-                    label="Grad-CAM uret",
-                    value=True,
-                    info="Modelin dikkat ettigi bolgeleri isi haritasi olarak goster.",
-                )
+                gr.HTML("</div>")
 
-                with gr.Accordion("Model detaylari", open=False):
-                    gr.Markdown(
-                        "**ConvNeXt-Tiny** — ImageNet on-egitimli, 28M parametre, "
-                        "Progressive Unfreezing ile fine-tune.\n\n"
-                        "**Custom CNN** — Residual + SE Attention + Multi-Scale, "
-                        "~1.3M parametre, sifirdan egitim."
-                    )
+                gr.HTML("""
+                <div class="ns-block">
+                  <div class="ns-block-label">Sistem</div>
+                  <div class="ns-meta-grid">
+                    <div class="ns-meta-card">
+                      <div class="ns-meta-k">Device</div>
+                      <div class="ns-meta-v">CPU</div>
+                    </div>
+                    <div class="ns-meta-card">
+                      <div class="ns-meta-k">Img Size</div>
+                      <div class="ns-meta-v">224x224</div>
+                    </div>
+                    <div class="ns-meta-card">
+                      <div class="ns-meta-k">Classes</div>
+                      <div class="ns-meta-v">2</div>
+                    </div>
+                    <div class="ns-meta-card">
+                      <div class="ns-meta-k">Framework</div>
+                      <div class="ns-meta-v">PyTorch</div>
+                    </div>
+                  </div>
+                </div>
+                """)
 
-                with gr.Accordion("Grad-CAM nedir?", open=False):
-                    gr.Markdown(
-                        "Grad-CAM (Gradient-weighted Class Activation Mapping), "
-                        "modelin karar verirken goruntunun hangi bolgelerine baktigini "
-                        "gosteren isi haritasidir. **Kirmizi/sari bolgeler** modelin en "
-                        "yogun dikkat verdigi alanlardir. Iyi egitilmis bir modelin "
-                        "kanama bolgesine odaklanmasi beklenir."
-                    )
+                gr.HTML("""
+                <div class="ns-disc">
+                  BM 480 Derin Ogrenme · Proje 2<br>
+                  Yalnizca arastirma amaclidir<br>
+                  Klinik karar vermek icin kullanilmaz
+                </div>
+                """)
 
-            with gr.Column(scale=4):
-                with gr.Row():
-                    with gr.Column(scale=5):
-                        image_input = gr.Image(
-                            label="CT Goruntusu",
-                            type="pil",
-                            height=420,
-                            sources=["upload", "clipboard"],
+            with gr.Column(scale=1, elem_classes=["ns-main"]):
+
+                with gr.Row(equal_height=True):
+                    with gr.Column(scale=1):
+                        gr.HTML("""
+                        <div style="padding:24px 24px 0">
+                          <div class="ns-panel">
+                            <div class="ns-panel-head">
+                              <span class="ns-panel-title">Tahmin Skorlari</span>
+                              <span class="ns-panel-badge">Softmax</span>
+                            </div>
+                            <div class="ns-panel-body">
+                        """)
+                        output_label = gr.Label(
+                            label="", num_top_classes=2, show_label=False,
                         )
-                        with gr.Row():
-                            predict_btn = gr.Button(
-                                "Analiz Et",
-                                variant="primary",
-                                size="lg",
-                                scale=3,
-                            )
-                            clear_btn = gr.Button(
-                                "Temizle",
-                                variant="secondary",
-                                size="lg",
-                                scale=1,
-                            )
-                        status_display = gr.HTML(_status_html("Hazir. Goruntu yukleyin.", "ready"))
+                        gr.HTML("</div></div></div>")
 
-                    with gr.Column(scale=6):
-                        result_banner = gr.HTML(
-                            "<div style='padding:14px 18px;border-radius:10px;background:#f1f5f9;"
-                            "color:#64748b;text-align:center;'>Henuz analiz yapilmadi.</div>"
+                    with gr.Column(scale=1):
+                        gr.HTML("""
+                        <div style="padding:24px 24px 0">
+                          <div class="ns-panel">
+                            <div class="ns-panel-head">
+                              <span class="ns-panel-title">Grad-CAM Aktivasyon</span>
+                              <span class="ns-panel-badge">Harita</span>
+                            </div>
+                        """)
+                        gradcam_output = gr.Image(
+                            label="", height=220, show_label=False,
                         )
-                        with gr.Tabs(elem_classes="result-tabs"):
-                            with gr.Tab("Olasilik Skorlari"):
-                                output_label = gr.Label(
-                                    label="Sinif Olasiliklari",
-                                    num_top_classes=2,
-                                    show_label=False,
-                                )
-                            with gr.Tab("Grad-CAM"):
-                                gradcam_output = gr.Image(
-                                    label="Isi haritasi (model dikkat bolgeleri)",
-                                    height=380,
-                                    show_label=False,
-                                )
-                            with gr.Tab("Detayli Rapor"):
-                                detail_output = gr.Textbox(
-                                    label="",
-                                    lines=16,
-                                    interactive=False,
-                                    show_label=False,
-                                )
+                        gr.HTML("</div></div>")
 
-                gr.Markdown("### Hazir Ornekler")
-                gr.Examples(
-                    examples=_example_paths(),
-                    inputs=image_input,
-                    label="",
-                    examples_per_page=6,
-                )
-
-        gr.HTML(
-            "<div class='disclaimer'><b>Klinik Uyari.</b> "
-            "Bu sistem BM 480 Derin Ogrenme dersi kapsaminda gelistirilmis arastirma amacli "
-            "bir prototiptir. Tibbi teshis ya da tedavi kararlari icin kullanilamaz. "
-            "Tum klinik kararlar yetkili saglik uzmani tarafindan alinmalidir.</div>"
-        )
-
-        gr.HTML(
-            "<div class='app-footer'>"
-            "<strong>Veri:</strong> felipekitamura/head-ct-hemorrhage (Kaggle) &middot; 200 goruntu (70/15/15 stratified split)"
-            " &nbsp;|&nbsp; <strong>Teknikler:</strong> Transfer Learning, Mixup, Label Smoothing, "
-            "Cosine Annealing, Progressive Unfreezing, Gradient Clipping, TTA"
-            " &nbsp;|&nbsp; <strong>Siniflar:</strong> Normal, Hemorrhage"
-            "</div>"
-        )
+                detail_output = gr.HTML(value=_placeholder_html())
 
         predict_btn.click(
             fn=predict,
-            inputs=[image_input, model_choice, use_tta, show_gradcam],
-            outputs=[result_banner, output_label, gradcam_output, detail_output, status_display],
-        )
-        clear_btn.click(
-            fn=lambda: (
-                None,
-                "<div style='padding:14px 18px;border-radius:10px;"
-                "background:#f1f5f9;color:#64748b;text-align:center;'>"
-                "Henuz analiz yapilmadi.</div>",
-                {}, None, "",
-                _status_html("Temizlendi. Hazir.", "ready"),
-            ),
-            inputs=[],
-            outputs=[image_input, result_banner, output_label, gradcam_output, detail_output, status_display],
+            inputs=[image_input, model_choice],
+            outputs=[output_label, gradcam_output, detail_output],
         )
 
     return demo
 
 
-def _is_port_available(server_name: str, port: int) -> bool:
-    bind_host = "127.0.0.1" if server_name in {"0.0.0.0", ""} else server_name
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        try:
-            sock.bind((bind_host, port))
-        except OSError:
-            return False
-    return True
-
-
-def _pick_server_port(server_name: str, preferred_port: int, max_tries: int = 20) -> int:
-    for offset in range(max_tries):
-        candidate = preferred_port + offset
-        if _is_port_available(server_name, candidate):
-            return candidate
-    raise OSError(
-        f"{preferred_port}-{preferred_port + max_tries - 1} araliginda bos port bulunamadi."
-    )
-
-
 def launch_interface():
-    server_name = os.getenv("GRADIO_SERVER_NAME", "127.0.0.1")
-    preferred_port = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
-    server_port = _pick_server_port(server_name, preferred_port)
-
-    if server_port != preferred_port:
-        print(f"[APP] Port {preferred_port} dolu, {server_port} kullaniliyor.")
-
-    demo = create_interface()
-    return demo.launch(
-        server_name=server_name,
-        server_port=server_port,
-        share=False,
-        theme=MEDICAL_THEME,
-        css=CUSTOM_CSS,
-    )
+    demo = build_ui()
+    demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
 
 
 if __name__ == "__main__":
