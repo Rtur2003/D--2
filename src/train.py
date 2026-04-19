@@ -26,7 +26,7 @@ from typing import Dict, Tuple, Optional
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
 from config import (
@@ -612,115 +612,6 @@ def run_training(augment: bool = True) -> None:
     print("=" * 70)
     print(f"Modeller: {MODELS_DIR}")
     print(f"Grafikler: {RESULTS_DIR}")
-
-
-def run_training_v2(data_dir: str = None, augment: bool = True) -> None:
-    """
-    Büyük veri seti (v2) ile eğitim pipeline'ı.
-    data_v2/normal ve data_v2/hemorrhage klasörlerinden okur.
-    WeightedRandomSampler ile sınıf dengesizliğini giderir.
-    """
-    import glob as _glob
-    set_seed()
-
-    if data_dir is None:
-        data_dir = str(MODELS_DIR.parent / "data_v2")
-
-    # ── 1. Görüntüleri tara ───────────────────────────────────────────
-    normal_imgs = sorted(
-        _glob.glob(os.path.join(data_dir, "normal", "*.jpg"))
-        + _glob.glob(os.path.join(data_dir, "normal", "*.png"))
-    )
-    hem_imgs = sorted(
-        _glob.glob(os.path.join(data_dir, "hemorrhage", "*.jpg"))
-        + _glob.glob(os.path.join(data_dir, "hemorrhage", "*.png"))
-    )
-    all_paths  = normal_imgs + hem_imgs
-    all_labels = [0] * len(normal_imgs) + [1] * len(hem_imgs)
-
-    print(f"\n[V2] Normal: {len(normal_imgs)}, Hemorrhage: {len(hem_imgs)}")
-    print(f"[V2] Toplam: {len(all_paths)}")
-
-    # ── 2. Train / Val / Test split (%70 / %15 / %15) ────────────────
-    import random as _rand
-    _rand.seed(RANDOM_SEED)
-    indices = list(range(len(all_paths)))
-    _rand.shuffle(indices)
-    n = len(indices)
-    n_train = int(n * 0.70)
-    n_val   = int(n * 0.15)
-
-    tr_idx  = indices[:n_train]
-    va_idx  = indices[n_train:n_train + n_val]
-    te_idx  = indices[n_train + n_val:]
-
-    train_paths  = [all_paths[i]  for i in tr_idx]
-    train_labels = [all_labels[i] for i in tr_idx]
-    val_paths    = [all_paths[i]  for i in va_idx]
-    val_labels   = [all_labels[i] for i in va_idx]
-
-    # ── 3. Normalizasyon istatistikleri ───────────────────────────────
-    mean, std = compute_train_statistics(train_paths)
-    stats_path = MODELS_DIR / "train_stats.json"
-    with open(str(stats_path), "w") as f:
-        json.dump({"mean": mean, "std": std}, f, indent=2)
-
-    # ── 4. Transforms ─────────────────────────────────────────────────
-    train_tf = get_transforms(mean, std, is_train=True, augment=augment)
-    val_tf   = get_transforms(mean, std, is_train=False)
-
-    # ── 5. WeightedRandomSampler (sınıf dengesizliği) ─────────────────
-    n0 = train_labels.count(0)
-    n1 = train_labels.count(1)
-    w  = [1.0 / n0 if l == 0 else 1.0 / n1 for l in train_labels]
-    sampler = WeightedRandomSampler(w, num_samples=len(w), replacement=True)
-
-    train_ds = HeadCTDataset(train_paths, train_labels, train_tf)
-    val_ds   = HeadCTDataset(val_paths,   val_labels,   val_tf)
-    train_loader = DataLoader(train_ds, batch_size=32, sampler=sampler,
-                              num_workers=0, pin_memory=False)
-    val_loader   = DataLoader(val_ds,   batch_size=32, shuffle=False,
-                              num_workers=0)
-
-    print(f"[V2] Train loader: {len(train_ds)} örnek (balanced sampler)")
-    print(f"[V2] Val loader:   {len(val_ds)} örnek")
-
-    # ── 6. Custom CNN v2 ──────────────────────────────────────────────
-    print("\n" + "=" * 70)
-    print("MODEL: Custom CNN v2 — Büyük Veri Seti Eğitimi")
-    print("=" * 70)
-
-    (MODELS_DIR / "custom_cnn_best.pth").unlink(missing_ok=True)
-
-    cnn = get_custom_cnn()
-    cnn_hparams = {
-        **DEFAULT_HPARAMS,
-        "learning_rate": 1e-4,
-        "batch_size": 32,
-        "weight_decay": 1e-4,
-        "epochs": 25,
-        "early_stopping_patience": 7,
-    }
-    cnn_hist = train_model(
-        cnn, train_loader, val_loader,
-        model_name="custom_cnn",
-        hparams=cnn_hparams,
-        use_mixup=True,
-        mixup_alpha=0.2,
-        label_smoothing=0.1,
-        use_cosine=True,
-    )
-    plot_training_curves(
-        cnn_hist, "Custom CNN v2",
-        save_path=str(RESULTS_DIR / "custom_cnn_training_curves.png")
-    )
-
-    # ConvNeXt CPU'da çok yavaş — Colab GPU'da eğit, burada atla
-    print("\n[V2] ConvNeXt CPU'da atlandı — Colab GPU ile egit.")
-
-    print("\n" + "=" * 70)
-    print("V2 EĞİTİMİ TAMAMLANDI!")
-    print("=" * 70)
 
 
 if __name__ == "__main__":
