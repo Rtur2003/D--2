@@ -31,7 +31,8 @@
       "Bash(taskkill /F /PID 8476 /PID 17512)",
       "Bash(xargs -I{} taskkill /F /PID {})",
       "Bash(taskkill /F /PID 8476)",
-      "Bash(taskkill /F /PID 17512)"
+      "Bash(taskkill /F /PID 17512)",
+      "Bash(python test_image.py external_test/)"
     ]
   }
 }
